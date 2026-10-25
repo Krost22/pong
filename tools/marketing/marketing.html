@@ -199,6 +199,39 @@ const IMAGES = {
     panel(OUT_H - 250, 210, '#7ee05a');
     footer(OUT_H - 175);
   },
+  // 7. Imagen para la descripción de itch.io: los 4 modos en fichas, cada una con captura y texto
+  desc() {
+    startPong('classic'); cheat = follow; step(260); const classic = snap();
+    startPong('modern'); cheat = follow; step(150);
+    P.powerups.gifts.push({ x: 152, y: 70, life: 12, t: 0, colors: ['#ff5a4f', '#b8322a', '#ffd23f'] });
+    P.ball.vx = 330; P.ball.vy = 30; P.ball.x = 150; P.ball.y = 80; forceGoal = 60;
+    for (let i = 0; i < 80 && P.right.score === 0; i++) step(1);
+    step(14); const modern = snap();
+    rogueRoom({ floor: 3, room: 3, doors: ['boss'], hearts: 4 }, 'boss'); cheat = follow; step(120); P.left.score = 4; P.rogue.onGoal('left', false); step(140); const rogue = snap();
+    toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(220); P.knoid.spawnShip(); P.knoid.applyCapsule('F'); step(80); const knoid = snap();
+
+    o.fillStyle = '#0b1026'; o.fillRect(0, 0, OUT_W, OUT_H);
+    for (let i = 0; i < 160; i++) { o.fillStyle = i % 5 ? '#2a355e' : '#ffffff'; o.fillRect((i * 97) % OUT_W, (i * 181) % OUT_H, 4, 4); }
+    logo(OUT_W / 2, 150, 110);
+    text('4 JUEGOS EN 1 · PIXEL ART · TÁCTIL Y TECLADO', OUT_W / 2, 215, 20, '#ffffff');
+    const rows = [
+      [classic, 'CLÁSICO', '#ffffff', ['EL PONG ORIGINAL', 'EN BLANCO Y NEGRO.', 'CONTRA LA COM O', '2 JUGADORES.']],
+      [modern, 'MODERNO', '#7ee05a', ['CÉSPED VIVO, POWER-UPS,', 'BOLA DE FUEGO Y GOLES', 'QUE QUEMAN LA CANCHA.']],
+      [rogue, 'ROGUELIKE', '#ffd23f', ['3 PISOS, 17 CARTAS,', 'TIENDA, DESCANSO Y', 'JEFES: MURO, REY DE', 'HIELO Y DRAGÓN.']],
+      [knoid, 'KROSTNOID', '#3fa7ff', ['ROMPELADRILLOS CON', 'NAVES ENEMIGAS, COMBOS', 'Y 8 CÁPSULAS.']],
+    ];
+    const top = 270, rowH = (OUT_H - top - 120) / rows.length, imgW = 620, imgH = rowH - 40;
+    rows.forEach(([img, title, color, lines], i) => {
+      const y = top + i * rowH, flip = i % 2 === 1;
+      const ix = flip ? OUT_W - 50 - imgW : 50, tx = flip ? 50 : 50 + imgW + 40;
+      o.fillStyle = color; o.fillRect(ix - 6, y - 6, imgW + 12, imgH + 12);
+      cover(img, ix, y, imgW, imgH);
+      text(title, tx, y + 60, 40, color, 'left');
+      lines.forEach((l, j) => text(l, tx, y + 120 + j * 38, 17, '#ffffff', 'left', null));
+    });
+    o.fillStyle = 'rgba(0,0,0,0.5)'; o.fillRect(0, OUT_H - 100, OUT_W, 100);
+    text('VERTICAL U HORIZONTAL · NAVEGADOR Y ANDROID · KROSTGAMES 2026', OUT_W / 2, OUT_H - 42, 18, '#9fd4ff', 'center', null);
+  },
   // 6. Portada para itch.io (630x500 x2): los tres mundos en franjas diagonales y una bola de fuego gigante
   cover() {
     rogueRoom({ room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); P.left.score = 2; step(10); const grass = snap();

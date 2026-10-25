@@ -21,6 +21,7 @@ const IMAGES = [
   ['04-krostnoid-vertical', 'knoid', 1080, 1920, 540, 960],
   ['05-pista-de-hielo-vertical', 'ice', 1080, 1920, 540, 960],
   ['itchio-cover', 'cover', 1260, 1000, 960, 540], // 630x500 recomendado por itch.io, a doble resolución
+  ['itchio-descripcion', 'desc', 1260, 1900, 960, 540], // imagen para el texto de la página de itch.io
 ].filter(([, img]) => !ONLY || img === ONLY);
 
 const server = http.createServer((req, res) => {

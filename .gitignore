@@ -13,3 +13,6 @@ tools/marketing/frames/
 tools/marketing/profile*/
 tools/marketing/music.wav
 tools/marketing/*.log
+
+# Paquetes para publicar (itch.io)
+/dist/

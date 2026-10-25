@@ -1,0 +1,68 @@
+=== AJUSTES PARA LA PÁGINA DE ITCH.IO ===
+
+Título: PONG — 4 juegos en 1
+Resumen corto (tagline): Pong clásico, moderno con fuego y power-ups, roguelike con jefes y un rompeladrillos con naves. Pixel art, táctil y teclado.
+Clasificación: Games
+Tipo de proyecto (Kind of project): HTML
+Subir: pong-itchio-v<versión>.zip  -> marcar "This file will be played in the browser"
+Embed options:
+  - Viewport: 960 x 540 (el juego se adapta a cualquier tamaño)
+  - Marcar: "Mobile friendly"  (orientación: Default, funciona en vertical y horizontal)
+  - Marcar: "Fullscreen button"
+  - Opcional: "Click to launch in fullscreen" (recomendado en móvil)
+Portada (Cover image): itchio-cover-630x500.png  (o itchio-cover.png, misma imagen al doble de resolución)
+Capturas (Screenshots): las imágenes 01 a 05 de la carpeta marketing
+Tráiler: sube marketing/trailer.mp4 a YouTube y pega el enlace en "Gameplay video or trailer"
+Género: Sports / Action
+Etiquetas (tags): pong, arcade, retro, pixel-art, roguelike, breakout, 2-player, local-multiplayer, mobile, singleplayer
+Plataformas: HTML5 (y Android si subes también Pong.apk)
+Idiomas: Español
+Entradas: Keyboard, Touchscreen
+
+
+=== DESCRIPCIÓN (texto plano; mejor usar descripcion.html para conservar el formato) ===
+
+PONG — 4 juegos en 1
+
+El clásico de siempre, reinventado en pixel art. Juega al Pong original en blanco y negro, pásate al modo moderno con fuego y power-ups, sobrevive a una aventura roguelike contra jefes o rompe ladrillos esquivando naves enemigas en KrostNoid.
+
+Funciona en el navegador del ordenador y del móvil, en vertical u horizontal, con teclado o pantalla táctil.
+
+[imagen: itchio-descripcion.png]
+
+CLÁSICO
+El Pong original: blanco y negro, pixelado y con sus pitidos. Contra la COM, cuya dificultad sube un 10% cada 3 goles, o 2 jugadores en el mismo dispositivo.
+
+MODERNO
+- Cancha de césped que se aparta y se aplasta al paso de la pelota.
+- A alta velocidad la pelota arde, y un gol de fuego quema el césped del rival.
+- Regalos con power-ups: bolas fantasma, paleta gigante, globos, escudo, pase lento, congelado (que convierte la cancha en una pista de hockey sobre hielo)…
+- Confeti, ondas expansivas y sonidos sintetizados.
+
+ROGUELIKE
+- Una run de 3 pisos: Césped, Hielo y Volcán, con un jefe al final de cada uno (El Muro, el Rey de Hielo y el Dragón).
+- Eliges tu camino entre puertas de combate, élite, tienda o descanso.
+- 17 cartas de mejora que se acumulan: Vampiro, Gol de oro, Titán, Segunda vida…
+- Tus corazones no se recuperan solos. Si caes, vuelves a empezar.
+- La run se guarda entre salas para continuarla más tarde.
+
+KROSTNOID
+- Rompeladrillos rápido con niveles en bucle y ladrillos de plata y oro.
+- Naves enemigas: el ovni suelta cápsulas y el bombardero aturde tu paleta.
+- Combos que multiplican los puntos y 8 cápsulas: láser, multibola, bola de fuego, explosiva, barrera…
+
+CONTROLES
+- Táctil: arrastra el dedo en tu mitad de pantalla. En KrostNoid, arrastra y toca para lanzar.
+- Teclado:
+  - Jugador 1: W / S. Jugador 2: ↑ / ↓.
+  - KrostNoid: ← / → para mover, Espacio para lanzar.
+  - P: pausa. M: sonido.
+
+Los récords se guardan en tu navegador. También hay versión para Android.
+
+---
+ENGLISH
+PONG — 4 games in 1. Play the original black-and-white Pong, switch to the Modern mode with fire balls and power-ups, fight your way through a roguelike run with upgrade cards and bosses, or break bricks while dodging enemy ships in KrostNoid. Pixel art, chiptune sounds, works in portrait or landscape with keyboard or touch.
+Controls: drag on your half of the screen, or W/S (P1) and ↑/↓ (P2). In KrostNoid use ←/→ and Space. P pauses and M mutes the sound.
+
+Krostgames · 2026
