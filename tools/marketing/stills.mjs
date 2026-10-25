@@ -12,13 +12,16 @@ const STUB = '<head><script>window.__raf=null;window.requestAnimationFrame=(cb)=
   'window.addEventListener("blur",(e)=>e.stopImmediatePropagation(),true);' +
   'document.addEventListener("visibilitychange",(e)=>e.stopImmediatePropagation(),true);</script>';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+// Un cuarto argumento opcional genera solo esa imagen (p. ej. "cover")
+const ONLY = process.argv[5];
 const IMAGES = [
   ['01-poster', 'key', 1920, 1080, 960, 540],
   ['02-goles-de-fuego', 'fire', 1920, 1080, 1280, 720],
   ['03-roguelike-dragon', 'rogue', 1920, 1080, 1280, 720],
   ['04-krostnoid-vertical', 'knoid', 1080, 1920, 540, 960],
   ['05-pista-de-hielo-vertical', 'ice', 1080, 1920, 540, 960],
-];
+  ['itchio-cover', 'cover', 1260, 1000, 960, 540], // 630x500 recomendado por itch.io, a doble resolución
+].filter(([, img]) => !ONLY || img === ONLY);
 
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);

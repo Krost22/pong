@@ -199,6 +199,67 @@ const IMAGES = {
     panel(OUT_H - 250, 210, '#7ee05a');
     footer(OUT_H - 175);
   },
+  // 6. Portada para itch.io (630x500 x2): los tres mundos en franjas diagonales y una bola de fuego gigante
+  cover() {
+    rogueRoom({ room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); P.left.score = 2; step(10); const grass = snap();
+    rogueRoom({ floor: 2, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); P.left.score = 3; P.powerups.spawnGhosts(2); step(20); const ice = snap();
+    rogueRoom({ floor: 3, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); P.left.score = 4; P.rogue.onGoal('left', false); step(140); const lava = snap();
+    // Cada mundo se encuadra donde hay juego: tu paleta en el césped, el centro en el hielo y el Dragón en el volcán
+    const slant = OUT_H * 0.3;
+    const strips = [[grass, -OUT_W, OUT_W * 0.36, 0.0], [ice, OUT_W * 0.36, OUT_W * 0.66, 0.5], [lava, OUT_W * 0.66, OUT_W * 2, 1.0]];
+    o.imageSmoothingEnabled = false;
+    strips.forEach(([img, x0, x1, focus]) => {
+      o.save();
+      o.beginPath();
+      o.moveTo(x0 + slant, 0); o.lineTo(x1 + slant, 0); o.lineTo(x1 - slant, OUT_H); o.lineTo(x0 - slant, OUT_H);
+      o.closePath(); o.clip();
+      const s = OUT_H / img.height;
+      const w = img.width * s;
+      o.drawImage(img, -focus * (w - OUT_W), 0, w, OUT_H);
+      o.restore();
+    });
+    // Separadores blancos entre mundos
+    o.strokeStyle = '#ffffff'; o.lineWidth = 12;
+    for (const x of [OUT_W * 0.36, OUT_W * 0.66]) {
+      o.beginPath(); o.moveTo(x + slant, 0); o.lineTo(x - slant, OUT_H); o.stroke();
+    }
+    const v = o.createRadialGradient(OUT_W / 2, OUT_H * 0.5, 150, OUT_W / 2, OUT_H * 0.5, OUT_W * 0.8);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)');
+    o.fillStyle = v; o.fillRect(0, 0, OUT_W, OUT_H);
+
+    // Bola de fuego gigante (la misma cruz de 4x4 de la pelota del juego) con estela de fuego
+    const B = 16, bx = OUT_W * 0.6, by = OUT_H * 0.6;
+    const cross = (x, y, b, body, shade, shine) => {
+      o.fillStyle = body; o.fillRect(x + b, y, b * 2, b * 4); o.fillRect(x, y + b, b * 4, b * 2);
+      if (shade) { o.fillStyle = shade; o.fillRect(x + b * 3, y + b * 2, b, b); o.fillRect(x + b * 2, y + b * 3, b, b); }
+      if (shine) { o.fillStyle = shine; o.fillRect(x + b, y + b, b, b); }
+    };
+    const fire = ['#ffe066', '#ffb42e', '#ff7a1f', '#ff5a1f', '#a8261f', '#5a1a10'];
+    for (let i = 9; i >= 1; i--) {
+      const b = Math.max(3, Math.round(B * (1 - i / 11)));
+      o.globalAlpha = 1 - i / 11;
+      cross(bx - i * 46 - b * 2, by + i * 30 - b * 2, b, fire[Math.min(fire.length - 1, Math.floor(i / 1.6))]);
+    }
+    o.globalAlpha = 1;
+    for (let i = 0; i < 40; i++) { // chispas
+      const t = (i * 37 % 100) / 100, d = 40 + t * 380;
+      o.fillStyle = fire[i % 4];
+      o.fillRect(Math.round((bx - d * 0.84 + Math.sin(i * 7) * 30) / 8) * 8, Math.round((by + d * 0.55 + Math.cos(i * 5) * 30) / 8) * 8, 8, 8);
+    }
+    o.shadowColor = '#ffb42e'; o.shadowBlur = 70;
+    cross(bx - B * 2, by - B * 2, B, '#ffe066', '#ff6a1f', '#ffffff');
+    o.shadowBlur = 0;
+
+    // Título
+    o.fillStyle = 'rgba(0, 0, 0, 0.6)'; o.fillRect(0, 70, OUT_W, 300);
+    o.fillStyle = '#ffd23f'; o.fillRect(0, 70, OUT_W, 6); o.fillRect(0, 364, OUT_W, 6);
+    logo(OUT_W / 2, 270, 190);
+    text('KROSTGAMES', OUT_W / 2, 336, 26, '#ffffff');
+    // Cinta inferior con los modos
+    o.fillStyle = 'rgba(0, 0, 0, 0.78)'; o.fillRect(0, OUT_H - 130, OUT_W, 130);
+    o.fillStyle = '#7ee05a'; o.fillRect(0, OUT_H - 130, OUT_W, 6);
+    text('CLÁSICO · MODERNO · ROGUELIKE · KROSTNOID', OUT_W / 2, OUT_H - 60, 24, '#ffffff');
+  },
 };
 
 let fontDone = false;
