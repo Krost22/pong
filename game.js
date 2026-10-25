@@ -38,17 +38,19 @@
 
   let H = MAX_H;
   let portrait = false;
-  let mode = 'com';
-  let state = 'menu'; // menu | serve | play | paused | over
+  let mode = 'com';      // com | 2p
+  let style = 'classic'; // classic | modern
+  let state = 'menu';    // menu | serve | play | paused | over
   let pausedFrom = 'play';
   let serveTimer = 0, serveDir = 1;
   let level = 0;
   let msgTimer = 0;
   let muted = false;
-  let audio = null;
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const difficulty = () => (mode === 'com' ? Math.pow(1 + LEVEL_STEP, level) : 1);
+  const modernOn = () => style === 'modern';
+  const sfx = () => window.PongAudio[style];
 
   // --- Pantalla y orientación ---
   function layout() {
@@ -69,7 +71,7 @@
       H = newH;
     }
 
-    const cw = portrait ? H : W, ch = portrait ? W : H;
+    const { w: cw, h: ch } = screenSize();
     canvas.width = cw * SCALE;
     canvas.height = ch * SCALE;
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
@@ -78,21 +80,8 @@
     screenEl.style.height = `${Math.floor(ch * k)}px`;
   }
 
-  // --- Sonido ---
-  function beep(freq, dur) {
-    if (muted) return;
-    try {
-      audio ||= new (window.AudioContext || window.webkitAudioContext)();
-      if (audio.state === 'suspended') audio.resume();
-      const osc = audio.createOscillator();
-      const gain = audio.createGain();
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      gain.gain.value = 0.06;
-      osc.connect(gain).connect(audio.destination);
-      osc.start();
-      osc.stop(audio.currentTime + dur);
-    } catch (_) { /* sin audio */ }
+  function screenSize() {
+    return portrait ? { w: H, h: W } : { w: W, h: H };
   }
 
   // --- Flujo de juego ---
@@ -114,11 +103,12 @@
     resetField();
     releaseAll();
     hideMsg();
+    modern.reset();
     serveDir = Math.random() < 0.5 ? -1 : 1;
     startServe();
     showScreen('game');
     updateHud();
-    beep(660, 0.08);
+    sfx().start();
   }
 
   function startServe() {
@@ -134,25 +124,31 @@
     ball.vy = Math.sin(angle) * speed;
     rollAiError();
     state = 'play';
+    sfx().serve();
   }
 
   function goal(scorer) {
+    const side = scorer === left ? 'left' : 'right';
     scorer.score++;
-    beep(490, 0.25);
+    sfx().goal();
+    if (modernOn()) modern.onGoal(side, ball.y + BALL_SIZE / 2);
     if (scorer.score >= WIN_SCORE) {
       endGame(scorer);
       return;
     }
+    if (modernOn()) showMsg('¡GOL!', 1);
     if (mode === 'com') {
       const newLevel = Math.floor((left.score + right.score) / GOALS_PER_LEVEL);
       if (newLevel !== level) {
         level = newLevel;
         showMsg(`NIVEL ${level + 1}`, 1.6);
-        setTimeout(() => beep(880, 0.12), 280);
+        sfx().level();
       }
     }
     updateHud();
-    serveDir = scorer === left ? 1 : -1; // saca hacia quien recibió el gol
+    // Clásico: saca hacia quien recibió el gol. Moderno: hacia la cancha de quien anotó.
+    const towardScorer = scorer === left ? -1 : 1;
+    serveDir = modernOn() ? towardScorer : -towardScorer;
     startServe();
   }
 
@@ -165,6 +161,8 @@
     $('final').textContent = `${left.score} - ${right.score}`;
     updateHud();
     showScreen('over');
+    sfx().win();
+    if (modernOn()) modern.onWin(winner === left ? 'left' : 'right');
   }
 
   function toMenu() {
@@ -199,6 +197,7 @@
   // --- Actualización ---
   function update(dt) {
     if (msgTimer > 0 && (msgTimer -= dt) <= 0) hideMsg();
+    if (modernOn() && state !== 'paused') modern.update(dt);
     if (state !== 'serve' && state !== 'play') return;
 
     movePaddles(dt);
@@ -268,7 +267,13 @@
     ball.vy = Math.sin(angle) * speed;
     ball.x = dir > 0 ? p.x + PADDLE_W : p.x - BALL_SIZE;
     if (dir > 0) rollAiError();
-    beep(459, 0.04);
+    sfx().hit(clamp((speed - BALL_SPEED) / (BALL_MAX_SPEED - BALL_SPEED), 0, 1));
+    if (modernOn()) modern.onHit(p === left ? 'left' : 'right', dir);
+  }
+
+  function wallBounce() {
+    sfx().wall();
+    if (modernOn()) modern.onWall();
   }
 
   function stepBall(dt) {
@@ -278,11 +283,11 @@
     if (ball.y < 0) {
       ball.y = 0;
       ball.vy = Math.abs(ball.vy);
-      beep(226, 0.04);
+      wallBounce();
     } else if (ball.y > H - BALL_SIZE) {
       ball.y = H - BALL_SIZE;
       ball.vy = -Math.abs(ball.vy);
-      beep(226, 0.04);
+      wallBounce();
     }
 
     if (ball.vx < 0 && overlaps(left)) hit(left, 1);
@@ -318,31 +323,49 @@
     }
   }
 
-  function draw() {
-    const cw = portrait ? H : W, ch = portrait ? W : H;
+  // Posición (en pantalla) de cada marcador; la usan el dibujo y el confeti
+  function scoreBoxes() {
+    const s = 4;
+    if (portrait) {
+      return { left: { x: 14, y: W / 2 + 16, s }, right: { x: 14, y: W / 2 - 16 - 5 * s, s } };
+    }
+    return { left: { x: W / 2 - 24 - numberWidth(left.score, s), y: 12, s }, right: { x: W / 2 + 24, y: 12, s } };
+  }
+
+  function ballVisible() {
+    const blinking = state === 'serve' && Math.floor(serveTimer * 6) % 2 === 1;
+    return state !== 'over' && state !== 'menu' && !blinking;
+  }
+
+  function drawClassic() {
+    const { w: cw, h: ch } = screenSize();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, cw, ch);
     ctx.fillStyle = '#fff';
 
     for (let y = 3; y < H; y += 12) rect(W / 2 - 1, y, 2, 6);
 
-    const s = 4;
-    if (portrait) {
-      drawNumber(right.score, 14, W / 2 - 16 - 5 * s, s);
-      drawNumber(left.score, 14, W / 2 + 16, s);
-    } else {
-      drawNumber(left.score, W / 2 - 24 - numberWidth(left.score, s), 12, s);
-      drawNumber(right.score, W / 2 + 24, 12, s);
-    }
+    const boxes = scoreBoxes();
+    drawNumber(left.score, boxes.left.x, boxes.left.y, boxes.left.s);
+    drawNumber(right.score, boxes.right.x, boxes.right.y, boxes.right.s);
 
     rect(left.x, left.y, PADDLE_W, PADDLE_H);
     rect(right.x, right.y, PADDLE_W, PADDLE_H);
 
-    const blinking = state === 'serve' && Math.floor(serveTimer * 6) % 2 === 1;
-    if (state !== 'over' && state !== 'menu' && !blinking) {
-      rect(ball.x, ball.y, BALL_SIZE, BALL_SIZE);
-    }
+    if (ballVisible()) rect(ball.x, ball.y, BALL_SIZE, BALL_SIZE);
   }
+
+  function draw() {
+    if (modernOn()) modern.draw();
+    else drawClassic();
+  }
+
+  const modern = window.PongModern({
+    ctx, W, PADDLE_W, PADDLE_H, BALL_SIZE, left, right, ball,
+    get H() { return H; },
+    get state() { return state; },
+    rect, drawNumber, numberWidth, scoreBoxes, screenSize, ballVisible,
+  });
 
   // --- Interfaz ---
   function showScreen(name) {
@@ -350,6 +373,7 @@
     $('hud').classList.toggle('hidden', name === 'menu');
     $('btn-pause').classList.toggle('hidden', name !== 'game');
     $('quit-msg').classList.add('hidden');
+    screenEl.classList.toggle('modern', modernOn() && name !== 'menu');
   }
 
   function updateHud() {
@@ -370,9 +394,11 @@
     msgTimer = 0;
   }
 
-  function selectMode(m) {
-    mode = m;
-    document.querySelectorAll('.mode').forEach((b) => b.classList.toggle('selected', b.dataset.mode === m));
+  // Botones de opción del menú (modo de juego y estilo visual)
+  function select(group, value) {
+    if (group === 'mode') mode = value;
+    else style = value;
+    document.querySelectorAll(`[data-${group}]`).forEach((b) => b.classList.toggle('selected', b.dataset[group] === value));
   }
 
   function quit() {
@@ -385,7 +411,8 @@
     setTimeout(() => $('quit-msg').classList.remove('hidden'), 150);
   }
 
-  document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => selectMode(b.dataset.mode)));
+  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => select('mode', b.dataset.mode)));
+  document.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', () => select('style', b.dataset.style)));
   $('btn-start').addEventListener('click', newGame);
   $('btn-quit').addEventListener('click', quit);
   $('btn-pause').addEventListener('click', pause);
@@ -412,15 +439,21 @@
     if (!keys.has(e.code)) keys.set(e.code, ++pressSeq);
     if (e.repeat) return;
 
+    if (e.code === 'KeyM') {
+      muted = !muted;
+      window.PongAudio.setMuted(muted);
+      return;
+    }
     if (state === 'menu') {
-      if (e.code === 'Digit1' || e.code === 'Numpad1') selectMode('com');
-      else if (e.code === 'Digit2' || e.code === 'Numpad2') selectMode('2p');
+      if (e.code === 'Digit1' || e.code === 'Numpad1') select('mode', 'com');
+      else if (e.code === 'Digit2' || e.code === 'Numpad2') select('mode', '2p');
+      else if (e.code === 'KeyC') select('style', 'classic');
+      else if (e.code === 'KeyX') select('style', 'modern');
       else if (e.code === 'Enter') newGame();
       return;
     }
     if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Space') togglePause();
     else if (e.code === 'KeyN' || (state === 'over' && e.code === 'Enter')) newGame();
-    else if (e.code === 'KeyM') muted = !muted;
   });
   window.addEventListener('keyup', (e) => {
     keys.delete(e.code);

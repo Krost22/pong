@@ -47,7 +47,7 @@ Write-Host "API:   $($platform.Name)"
 # --- Preparar carpeta de compilación ---
 if (Test-Path $build) { Remove-Item $build -Recurse -Force }
 New-Item -ItemType Directory -Force "$build\assets", "$build\classes", "$build\dex" | Out-Null
-foreach ($f in 'index.html', 'style.css', 'game.js') { Copy-Item (Join-Path $web $f) "$build\assets\$f" }
+Get-ChildItem $web -File | Where-Object { $_.Extension -in '.html', '.css', '.js' } | Copy-Item -Destination "$build\assets"
 
 # --- Recursos + manifiesto + assets ---
 Run "$tools\aapt2.exe" @('compile', '--dir', "$here\res", '-o', "$build\res.zip")

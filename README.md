@@ -5,6 +5,9 @@ Pong clásico en blanco y negro pixelado, hecho solo con HTML, CSS y JavaScript.
 **Jugar:** https://krost22.github.io/pong/
 
 - 1 jugador contra la COM (la dificultad sube un 10% cada 3 goles) o 2 jugadores.
+- Dos estilos:
+  - **Clásico:** blanco y negro con pitidos, como el original.
+  - **Moderno:** pixel art a color sobre una cancha de césped que reacciona al paso de la pelota, con estela, chispas, confeti y onda expansiva en los goles, y sonidos sintetizados nuevos. En este estilo, tras un gol el saque va hacia la cancha de quien anotó.
 - Gana el primero en llegar a 11.
 - Se adapta a pantallas verticales y horizontales.
 

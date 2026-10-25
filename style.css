@@ -171,13 +171,29 @@ h2 {
   white-space: nowrap;
 }
 
+/* Modo moderno: marco y mensajes a color; overlays más transparentes para ver el confeti */
+#screen.modern {
+  box-shadow: 0 0 0 3px #7ee05a;
+}
+
+#screen.modern .overlay.translucent {
+  background: rgba(10, 30, 10, 0.55);
+}
+
+#screen.modern #msg {
+  background: #1f4d1d;
+  border-color: #ffd23f;
+  color: #ffd23f;
+}
+
 /* Pantallas bajas (móvil en horizontal): menú más compacto */
-@media (max-height: 420px) {
-  .overlay { gap: 6px; padding: 8px; }
-  h1 { font-size: 40px; }
-  button { padding: 5px 12px; }
-  button.big { padding: 6px 24px; font-size: 18px; }
-  .help { line-height: 1.4; }
+@media (max-height: 460px) {
+  .overlay { gap: 5px; padding: 8px; }
+  h1 { font-size: 36px; }
+  button { padding: 4px 12px; }
+  button.big { padding: 5px 24px; font-size: 18px; }
+  .help { line-height: 1.35; font-size: 9px; }
+  .credit { margin-top: 0; }
 }
 
 .hidden {
