@@ -108,6 +108,50 @@ window.PongAudio = (() => {
         tone({ type: 'sine', f0: note(n + 12), dur: 0.15, vol: 0.06, at: 0.35 + i * 0.07 });
       });
     }),
+    // La pelota se prende fuego: llamarada
+    ignite: sound(() => {
+      noise({ dur: 0.45, vol: 0.22, filter: 'lowpass', f0: 300, f1: 2500, q: 1.5, attack: 0.04 });
+      tone({ type: 'sawtooth', f0: 90, f1: 180, dur: 0.3, vol: 0.06 });
+    }),
+    // Aparece un regalo en la línea central
+    gift: sound(() => {
+      [84, 88].forEach((n, i) => tone({ type: 'sine', f0: note(n), dur: 0.12, vol: 0.1, at: i * 0.06 }));
+    }),
+    // Se abre un regalo
+    powerup: sound(() => {
+      [72, 76, 79, 84, 88].forEach((n, i) => tone({ type: 'square', f0: note(n), dur: 0.1, vol: 0.06, at: i * 0.04 }));
+      noise({ dur: 0.15, vol: 0.08, filter: 'highpass', f0: 5000 });
+    }),
+    // Fantasmas: ulular con vibrato desafinado
+    ghost: sound(() => {
+      tone({ type: 'sine', f0: 700, f1: 380, dur: 0.6, vol: 0.12, at: 0.2, attack: 0.1 });
+      tone({ type: 'sine', f0: 740, f1: 400, dur: 0.6, vol: 0.1, at: 0.22, attack: 0.1 });
+    }),
+    slow: sound(() => tone({ type: 'triangle', f0: 700, f1: 120, dur: 0.6, vol: 0.18, at: 0.2 })),
+    grow: sound(() => tone({ type: 'square', f0: 150, f1: 600, dur: 0.4, vol: 0.08, at: 0.2 })),
+    shrink: sound(() => tone({ type: 'square', f0: 600, f1: 140, dur: 0.4, vol: 0.08, at: 0.2 })),
+    freeze: sound(() => {
+      [96, 100, 103, 108].forEach((n, i) => tone({ type: 'sine', f0: note(n), dur: 0.25, vol: 0.06, at: 0.2 + i * 0.05 }));
+      noise({ dur: 0.3, vol: 0.06, filter: 'highpass', f0: 6000, at: 0.2 });
+    }),
+    shield: sound(() => {
+      noise({ dur: 0.35, vol: 0.1, filter: 'bandpass', f0: 2500, f1: 600, q: 4, at: 0.2 });
+      tone({ type: 'triangle', f0: note(79), dur: 0.4, vol: 0.12, at: 0.25 });
+    }),
+    // El escudo detiene la pelota: golpe metálico
+    block: sound(() => {
+      tone({ type: 'square', f0: 1200, f1: 900, dur: 0.15, vol: 0.08 });
+      tone({ type: 'sine', f0: 1800, dur: 0.35, vol: 0.08 });
+      tone({ type: 'sine', f0: 160, f1: 60, dur: 0.2, vol: 0.25 });
+    }),
+    balloons: sound(() => {
+      for (let i = 0; i < 6; i++) tone({ type: 'sine', f0: 300 + i * 60, f1: 900 + i * 80, dur: 0.12, vol: 0.06, at: 0.2 + i * 0.05 });
+    }),
+    // Globo que explota: chasquido brillante + caída de tono
+    pop: sound(() => {
+      noise({ dur: 0.06, vol: 0.3, filter: 'highpass', f0: 1800 });
+      tone({ type: 'sine', f0: 900, f1: 200, dur: 0.07, vol: 0.15 });
+    }),
     // Pequeña fanfarria
     win: sound(() => {
       const melody = [[67, 0, 0.15], [72, 0.15, 0.15], [76, 0.3, 0.15], [79, 0.45, 0.3], [76, 0.78, 0.15], [79, 0.93, 0.6]];

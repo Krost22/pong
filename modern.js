@@ -4,7 +4,7 @@
 window.PongModern = (api) => {
   'use strict';
 
-  const { ctx, W, PADDLE_W, PADDLE_H, BALL_SIZE, left, right, ball } = api;
+  const { ctx, W, PADDLE_W, BALL_SIZE, BALL_MAX_SPEED, left, right, ball, powerups } = api;
 
   const C = {
     border: '#235a21',
@@ -16,7 +16,15 @@ window.PongModern = (api) => {
     trail: '255, 240, 170',
     p1: ['#a8dcff', '#3fa7ff', '#1d5fa8'], // claro, base, oscuro
     p2: ['#ffb8ad', '#ff5a4f', '#a8261f'],
+    ice: ['#f0fcff', '#9fe6ff', '#4aa8d8'],
   };
+  // Pelota según su estado: [cuerpo, sombra, brillo]
+  const BALL_LOOK = {
+    normal: ['#fff8dc', '#d6c48a', '#ffffff'],
+    fire: ['#ffe066', '#ff6a1f', '#ffffff'],
+    slow: ['#b8f0ff', '#4aa8d8', '#ffffff'],
+  };
+  const FIRE_SPEED = 215; // a partir de esta velocidad la pelota arde
   const CONFETTI = ['#ff5a4f', '#ffd23f', '#3fa7ff', '#7ee05a', '#ff8fd8', '#ffffff', '#b07cff'];
 
   // Resorte blando: la hierba tarda ~1 s en volver a su sitio tras pasar la pelota
@@ -36,6 +44,7 @@ window.PongModern = (api) => {
   const trail = [];
   const paddleFlash = { left: 0, right: 0 };
   let shake = 0, time = 0;
+  let burning = false;
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -85,6 +94,7 @@ window.PongModern = (api) => {
     sparks.length = confetti.length = waves.length = flashes.length = trail.length = 0;
     paddleFlash.left = paddleFlash.right = 0;
     shake = 0;
+    burning = false;
     for (const b of blades) b.bx = b.by = b.vx = b.vy = b.press = 0;
   }
 
@@ -121,6 +131,44 @@ window.PongModern = (api) => {
 
   function onWin(side) {
     burstConfetti(side, 160);
+  }
+
+  // Chispas en todas direcciones (coordenadas de campo); la usan los power-ups
+  function burst(x, y, colors, n, speed) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(speed * 0.3, speed);
+      sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.25, 0.55), max: 0.55, color: pick(colors) });
+    }
+  }
+
+  function addShake(seconds) {
+    shake = Math.max(shake, seconds);
+  }
+
+  // Fuego: llamas que salen de la pelota hacia atrás y suben como humo al apagarse
+  function emitFire(dt) {
+    const speed = Math.hypot(ball.vx, ball.vy);
+    const hot = api.state === 'play' && speed >= FIRE_SPEED && !powerups.slowBall;
+    if (hot && !burning) {
+      window.PongAudio.modern.ignite();
+      burst(ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2, ['#ffe066', '#ff6a1f'], 14, 70);
+    }
+    burning = hot;
+    if (!hot) return;
+    const intensity = clamp((speed - FIRE_SPEED) / (BALL_MAX_SPEED - FIRE_SPEED), 0, 1);
+    const n = Math.round((90 + 160 * intensity) * dt) + 1;
+    for (let i = 0; i < n; i++) {
+      sparks.push({ x: ball.x + rand(0, BALL_SIZE), y: ball.y + rand(0, BALL_SIZE),
+        vx: -ball.vx * rand(0.05, 0.2) + rand(-25, 25), vy: -ball.vy * rand(0.05, 0.2) + rand(-25, 25),
+        life: rand(0.18, 0.4 + 0.2 * intensity), max: 0.6, fire: true });
+    }
+  }
+
+  function fireColor(k) {
+    if (k > 0.75) return '#fff3b0';
+    if (k > 0.5) return '#ffb42e';
+    if (k > 0.3) return '#ff5a1f';
+    return 'rgba(70, 60, 55, 0.7)'; // humo
   }
 
   function burstConfetti(side, n) {
@@ -170,6 +218,7 @@ window.PongModern = (api) => {
     } else if (trail.length) {
       trail.shift();
     }
+    emitFire(dt);
 
     for (let k = waves.length - 1; k >= 0; k--) {
       const w = waves[k];
@@ -229,17 +278,28 @@ window.PongModern = (api) => {
   // --- Dibujo ---
   function drawPaddle(p, colors, flash) {
     const rect = api.rect;
+    const h = Math.round(p.h);
+    // Parpadea cuando a un cambio de tamaño le quedan menos de 2 s
+    const ending = [p.giant, p.mini].some((t) => t > 0 && t < 2);
+    if (ending && Math.floor(time * 8) % 2) ctx.globalAlpha = 0.55;
+    if (p.frozen > 0) colors = C.ice;
     const [light, base, dark] = flash > 0 ? ['#ffffff', '#ffffff', colors[0]] : colors;
     ctx.fillStyle = C.shadow;
-    rect(p.x + 2, p.y + 2, PADDLE_W, PADDLE_H);
+    rect(p.x + 2, p.y + 2, PADDLE_W, h);
     ctx.fillStyle = base;
-    rect(p.x, p.y + 1, PADDLE_W, PADDLE_H - 2);
+    rect(p.x, p.y + 1, PADDLE_W, h - 2);
     rect(p.x + 1, p.y, PADDLE_W - 2, 1);
-    rect(p.x + 1, p.y + PADDLE_H - 1, PADDLE_W - 2, 1);
+    rect(p.x + 1, p.y + h - 1, PADDLE_W - 2, 1);
     ctx.fillStyle = light;
-    rect(p.x, p.y + 1, 1, PADDLE_H - 3);
+    rect(p.x, p.y + 1, 1, h - 3);
     ctx.fillStyle = dark;
-    rect(p.x + PADDLE_W - 1, p.y + 2, 1, PADDLE_H - 3);
+    rect(p.x + PADDLE_W - 1, p.y + 2, 1, h - 3);
+    if (p.frozen > 0) {
+      // Escarcha
+      ctx.fillStyle = '#ffffff';
+      for (let y = 3; y < h - 2; y += 5) rect(p.x + 1 + (y % 2), p.y + y, 1, 1);
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawField() {
@@ -328,6 +388,7 @@ window.PongModern = (api) => {
 
     drawField();
     drawWaves();
+    powerups.drawUnder();
 
     // Marcador con sombra, del color de cada jugador
     const boxes = api.scoreBoxes();
@@ -347,20 +408,32 @@ window.PongModern = (api) => {
       rect(trail[i].x + 1, trail[i].y + 1, 2, 2);
     }
 
+    powerups.drawGhosts();
+
+    // Las llamas van detrás de la pelota; las chispas, delante
+    for (const s of sparks) {
+      if (!s.fire) continue;
+      const k = s.life / s.max;
+      ctx.fillStyle = fireColor(k);
+      rect(Math.round(s.x), Math.round(s.y), k > 0.5 ? 2 : 1, k > 0.5 ? 2 : 1);
+    }
+
     if (api.ballVisible()) {
+      const [body, shade, shine] = BALL_LOOK[burning ? 'fire' : (powerups.slowBall ? 'slow' : 'normal')];
       ctx.fillStyle = C.shadow;
       rect(ball.x + 2, ball.y + 2, BALL_SIZE, BALL_SIZE);
-      ctx.fillStyle = C.ball;
+      ctx.fillStyle = body;
       rect(ball.x + 1, ball.y, 2, 4);
       rect(ball.x, ball.y + 1, 4, 2);
-      ctx.fillStyle = C.ballShade;
+      ctx.fillStyle = shade;
       rect(ball.x + 3, ball.y + 2, 1, 1);
       rect(ball.x + 2, ball.y + 3, 1, 1);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = shine;
       rect(ball.x + 1, ball.y + 1, 1, 1);
     }
 
     for (const s of sparks) {
+      if (s.fire) continue;
       ctx.globalAlpha = Math.min(1, s.life / s.max * 1.5);
       ctx.fillStyle = s.color;
       rect(Math.round(s.x), Math.round(s.y), 1, 1);
@@ -378,5 +451,5 @@ window.PongModern = (api) => {
     ctx.globalAlpha = 1;
   }
 
-  return { reset, update, draw, onHit, onWall, onGoal, onWin };
+  return { reset, update, draw, onHit, onWall, onGoal, onWin, burst, shake: addShake };
 };

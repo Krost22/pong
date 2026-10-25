@@ -27,8 +27,9 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
 
-  const left = { x: PADDLE_MARGIN, y: 0, score: 0 };
-  const right = { x: W - PADDLE_MARGIN - PADDLE_W, y: 0, score: 0 };
+  // h = alto actual de la paleta; giant/mini/frozen/shield = segundos restantes de cada power-up
+  const left = { x: PADDLE_MARGIN, y: 0, score: 0, h: PADDLE_H, giant: 0, mini: 0, frozen: 0, shield: 0 };
+  const right = { x: W - PADDLE_MARGIN - PADDLE_W, y: 0, score: 0, h: PADDLE_H, giant: 0, mini: 0, frozen: 0, shield: 0 };
   const ball = { x: 0, y: 0, vx: 0, vy: 0 };
   const ai = { timer: 0, target: 0, error: 0 };
   const keys = new Map(); // tecla pulsada -> orden de pulsación
@@ -64,8 +65,8 @@
     if (newH !== H) {
       const r = newH / H;
       const rescale = (y, size) => clamp((y + size / 2) * r - size / 2, 0, newH - size);
-      left.y = rescale(left.y, PADDLE_H);
-      right.y = rescale(right.y, PADDLE_H);
+      left.y = rescale(left.y, left.h);
+      right.y = rescale(right.y, right.h);
       ball.y = rescale(ball.y, BALL_SIZE);
       ai.target *= r;
       H = newH;
@@ -92,6 +93,7 @@
   }
 
   function resetField() {
+    powerups.reset();
     left.y = right.y = (H - PADDLE_H) / 2;
     ai.target = H / 2;
     centerBall();
@@ -131,7 +133,10 @@
     const side = scorer === left ? 'left' : 'right';
     scorer.score++;
     sfx().goal();
-    if (modernOn()) modern.onGoal(side, ball.y + BALL_SIZE / 2);
+    if (modernOn()) {
+      modern.onGoal(side, ball.y + BALL_SIZE / 2);
+      powerups.onGoal();
+    }
     if (scorer.score >= WIN_SCORE) {
       endGame(scorer);
       return;
@@ -201,6 +206,7 @@
     if (state !== 'serve' && state !== 'play') return;
 
     movePaddles(dt);
+    if (modernOn()) powerups.update(dt);
 
     if (state === 'serve') {
       if ((serveTimer -= dt) <= 0) launch();
@@ -233,12 +239,13 @@
   }
 
   function moveToward(p, y, maxStep) {
-    p.y = clamp(p.y + clamp(y - p.y, -maxStep, maxStep), 0, H - PADDLE_H);
+    p.y = clamp(p.y + clamp(y - p.y, -maxStep, maxStep), 0, H - p.h);
   }
 
   function drive(p, dir, touchY, dt) {
-    if (dir) p.y = clamp(p.y + dir * PADDLE_SPEED * dt, 0, H - PADDLE_H);
-    else if (touchY !== null) moveToward(p, touchY - PADDLE_H / 2, TOUCH_SPEED * dt);
+    if (p.frozen > 0) return;
+    if (dir) p.y = clamp(p.y + dir * PADDLE_SPEED * dt, 0, H - p.h);
+    else if (touchY !== null) moveToward(p, touchY - p.h / 2, TOUCH_SPEED * dt);
   }
 
   function rollAiError() {
@@ -249,26 +256,32 @@
     const f = difficulty();
     if ((ai.timer -= dt) <= 0) {
       ai.timer = AI_REACTION / f;
-      ai.target = ball.vx > 0 ? ball.y + BALL_SIZE / 2 + ai.error : H / 2;
+      // Persigue la bola que llega más cerca; las bolas fantasma pueden engañarla
+      const incoming = [ball, ...(modernOn() ? powerups.ghosts : [])].filter((b) => b.vx > 0);
+      const chase = incoming.sort((a, b) => b.x - a.x)[0];
+      ai.target = chase ? chase.y + BALL_SIZE / 2 + ai.error : H / 2;
     }
-    moveToward(right, ai.target - PADDLE_H / 2, AI_SPEED * f * dt);
+    if (right.frozen > 0) return;
+    moveToward(right, ai.target - right.h / 2, AI_SPEED * f * dt);
   }
 
   function overlaps(p) {
     return ball.x < p.x + PADDLE_W && ball.x + BALL_SIZE > p.x &&
-           ball.y < p.y + PADDLE_H && ball.y + BALL_SIZE > p.y;
+           ball.y < p.y + p.h && ball.y + BALL_SIZE > p.y;
   }
 
   function hit(p, dir) {
-    const rel = clamp((ball.y + BALL_SIZE / 2 - (p.y + PADDLE_H / 2)) / (PADDLE_H / 2 + BALL_SIZE / 2), -1, 1);
+    const side = p === left ? 'left' : 'right';
+    const rel = clamp((ball.y + BALL_SIZE / 2 - (p.y + p.h / 2)) / (p.h / 2 + BALL_SIZE / 2), -1, 1);
     const angle = rel * Math.PI / 3;
-    const speed = Math.min(Math.hypot(ball.vx, ball.vy) * BALL_ACCEL, BALL_MAX_SPEED * difficulty());
+    let speed = Math.min(Math.hypot(ball.vx, ball.vy) * BALL_ACCEL, BALL_MAX_SPEED * difficulty());
+    if (modernOn()) speed = powerups.adjustHitSpeed(side, speed);
     ball.vx = Math.cos(angle) * speed * dir;
     ball.vy = Math.sin(angle) * speed;
     ball.x = dir > 0 ? p.x + PADDLE_W : p.x - BALL_SIZE;
     if (dir > 0) rollAiError();
     sfx().hit(clamp((speed - BALL_SPEED) / (BALL_MAX_SPEED - BALL_SPEED), 0, 1));
-    if (modernOn()) modern.onHit(p === left ? 'left' : 'right', dir);
+    if (modernOn()) modern.onHit(side, dir);
   }
 
   function wallBounce() {
@@ -290,9 +303,12 @@
       wallBounce();
     }
 
+    if (modernOn()) powerups.collide();
+
     if (ball.vx < 0 && overlaps(left)) hit(left, 1);
     else if (ball.vx > 0 && overlaps(right)) hit(right, -1);
 
+    if (modernOn()) powerups.checkShield();
     if (ball.x + BALL_SIZE < 0) goal(right);
     else if (ball.x > W) goal(left);
   }
@@ -349,19 +365,34 @@
     drawNumber(left.score, boxes.left.x, boxes.left.y, boxes.left.s);
     drawNumber(right.score, boxes.right.x, boxes.right.y, boxes.right.s);
 
-    rect(left.x, left.y, PADDLE_W, PADDLE_H);
-    rect(right.x, right.y, PADDLE_W, PADDLE_H);
+    rect(left.x, left.y, PADDLE_W, left.h);
+    rect(right.x, right.y, PADDLE_W, right.h);
 
     if (ballVisible()) rect(ball.x, ball.y, BALL_SIZE, BALL_SIZE);
   }
+
+  // Rectángulo del campo convertido a coordenadas de pantalla (para sprites que no deben girar)
+  function toScreenRect(x, y, w, h) {
+    return portrait ? { x: y, y: W - x - w, w: h, h: w } : { x, y, w, h };
+  }
+
+  const playerName = (side) => (side === 'left' ? 'J1' : (mode === 'com' ? 'COM' : 'J2'));
 
   function draw() {
     if (modernOn()) modern.draw();
     else drawClassic();
   }
 
+  const powerups = window.PongPowerups({
+    ctx, W, BALL_SIZE, PADDLE_H, BALL_SPEED, left, right, ball,
+    get H() { return H; },
+    get state() { return state; },
+    fx: () => modern,
+    rect, toScreenRect, playerName, showMsg,
+  });
+
   const modern = window.PongModern({
-    ctx, W, PADDLE_W, PADDLE_H, BALL_SIZE, left, right, ball,
+    ctx, W, PADDLE_W, BALL_SIZE, BALL_MAX_SPEED, left, right, ball, powerups,
     get H() { return H; },
     get state() { return state; },
     rect, drawNumber, numberWidth, scoreBoxes, screenSize, ballVisible,
