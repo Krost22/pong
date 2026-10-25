@@ -8,8 +8,11 @@ $web = Split-Path $here -Parent
 $build = Join-Path $here 'build'
 $out = Join-Path $web 'Pong.apk'
 
-$versionCode = 1
-$versionName = '1.0'
+# La versión sale de version.js (la misma que muestra el menú). 1.5 -> versionCode 10500
+$versionName = [regex]::Match((Get-Content (Join-Path $web 'version.js') -Raw), "PONG_VERSION\s*=\s*'([\d.]+)'").Groups[1].Value
+if (-not $versionName) { throw 'No se encontró PONG_VERSION en version.js' }
+$parts = @(($versionName.Split('.') + @('0', '0'))[0..2] | ForEach-Object { [int]$_ })
+$versionCode = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
 $minSdk = 21
 $targetSdk = 35
 $keystore = Join-Path $here 'pong.keystore'

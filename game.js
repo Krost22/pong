@@ -27,11 +27,13 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
 
-  // h = alto actual de la paleta; giant/mini/frozen/shield = segundos restantes de cada power-up
-  const left = { x: PADDLE_MARGIN, y: 0, score: 0, h: PADDLE_H, giant: 0, mini: 0, frozen: 0, shield: 0 };
-  const right = { x: W - PADDLE_MARGIN - PADDLE_W, y: 0, score: 0, h: PADDLE_H, giant: 0, mini: 0, frozen: 0, shield: 0 };
+  // h = alto actual de la paleta; giant/mini/frozen/shield = segundos restantes de cada power-up;
+  // boost = ayuda por ir perdiendo de 5 (paleta +50% hasta empatar)
+  const paddle = (x) => ({ x, y: 0, score: 0, h: PADDLE_H, giant: 0, mini: 0, frozen: 0, shield: 0, boost: false });
+  const left = paddle(PADDLE_MARGIN);
+  const right = paddle(W - PADDLE_MARGIN - PADDLE_W);
   const ball = { x: 0, y: 0, vx: 0, vy: 0 };
-  const ai = { timer: 0, target: 0, error: 0 };
+  const ai = { left: { timer: 0, target: 0, error: 0 }, right: { timer: 0, target: 0, error: 0 } };
   const keys = new Map(); // tecla pulsada -> orden de pulsación
   const touch = { left: null, right: null };
   const pointers = new Map(); // pointerId -> 'left' | 'right'
@@ -41,7 +43,8 @@
   let portrait = false;
   let mode = 'com';      // com | 2p
   let style = 'classic'; // classic | modern
-  let state = 'menu';    // menu | serve | play | paused | over
+  let state = 'serve';   // serve | play | paused | over
+  let demo = true;       // partida automática de fondo mientras se ve el menú
   let pausedFrom = 'play';
   let serveTimer = 0, serveDir = 1;
   let level = 0;
@@ -49,9 +52,12 @@
   let muted = false;
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const difficulty = () => (mode === 'com' ? Math.pow(1 + LEVEL_STEP, level) : 1);
+  const difficulty = () => (mode === 'com' && !demo ? Math.pow(1 + LEVEL_STEP, level) : 1);
   const modernOn = () => style === 'modern';
-  const sfx = () => window.PongAudio[style];
+  const sideOf = (p) => (p === left ? 'left' : 'right');
+  // La demo del menú juega sin sonido
+  const SILENT = new Proxy({}, { get: () => () => {} });
+  const sfx = () => (demo ? SILENT : window.PongAudio[style]);
 
   // --- Pantalla y orientación ---
   function layout() {
@@ -68,7 +74,8 @@
       left.y = rescale(left.y, left.h);
       right.y = rescale(right.y, right.h);
       ball.y = rescale(ball.y, BALL_SIZE);
-      ai.target *= r;
+      ai.left.target *= r;
+      ai.right.target *= r;
       H = newH;
     }
 
@@ -95,11 +102,11 @@
   function resetField() {
     powerups.reset();
     left.y = right.y = (H - PADDLE_H) / 2;
-    ai.target = H / 2;
+    ai.left.target = ai.right.target = H / 2;
     centerBall();
   }
 
-  function newGame() {
+  function resetMatch() {
     left.score = right.score = 0;
     level = 0;
     resetField();
@@ -108,9 +115,20 @@
     modern.reset();
     serveDir = Math.random() < 0.5 ? -1 : 1;
     startServe();
+  }
+
+  function newGame() {
+    demo = false;
+    resetMatch();
     showScreen('game');
     updateHud();
     sfx().start();
+  }
+
+  function toMenu() {
+    demo = true;
+    resetMatch();
+    showScreen('menu');
   }
 
   function startServe() {
@@ -124,13 +142,14 @@
     const speed = BALL_SPEED * difficulty();
     ball.vx = Math.cos(angle) * speed * serveDir;
     ball.vy = Math.sin(angle) * speed;
-    rollAiError();
+    rollAiError('left');
+    rollAiError('right');
     state = 'play';
     sfx().serve();
   }
 
   function goal(scorer) {
-    const side = scorer === left ? 'left' : 'right';
+    const side = sideOf(scorer);
     scorer.score++;
     sfx().goal();
     if (modernOn()) {
@@ -138,11 +157,18 @@
       powerups.onGoal();
     }
     if (scorer.score >= WIN_SCORE) {
-      endGame(scorer);
-      return;
+      if (demo) {
+        left.score = right.score = 0; // la demo vuelve a empezar sin pantalla final
+      } else {
+        endGame(scorer);
+        return;
+      }
     }
-    if (modernOn()) showMsg('¡GOL!', 1);
-    if (mode === 'com') {
+    if (modernOn()) {
+      showMsg('¡GOL!', 0.8);
+      powerups.checkComeback();
+    }
+    if (mode === 'com' && !demo) {
       const newLevel = Math.floor((left.score + right.score) / GOALS_PER_LEVEL);
       if (newLevel !== level) {
         level = newLevel;
@@ -161,27 +187,16 @@
     state = 'over';
     centerBall();
     hideMsg();
-    const name = winner === left ? 'JUGADOR 1' : (mode === 'com' ? 'COM' : 'JUGADOR 2');
-    $('winner').textContent = `¡GANA ${name}!`;
+    $('winner').textContent = `¡GANA ${winner === left ? 'JUGADOR 1' : (mode === 'com' ? 'COM' : 'JUGADOR 2')}!`;
     $('final').textContent = `${left.score} - ${right.score}`;
     updateHud();
     showScreen('over');
     sfx().win();
-    if (modernOn()) modern.onWin(winner === left ? 'left' : 'right');
-  }
-
-  function toMenu() {
-    state = 'menu';
-    left.score = right.score = 0;
-    level = 0;
-    resetField();
-    releaseAll();
-    hideMsg();
-    showScreen('menu');
+    if (modernOn()) modern.onWin(sideOf(winner));
   }
 
   function pause() {
-    if (state !== 'play' && state !== 'serve') return;
+    if (demo || (state !== 'play' && state !== 'serve')) return;
     pausedFrom = state;
     state = 'paused';
     releaseAll();
@@ -201,7 +216,7 @@
 
   // --- Actualización ---
   function update(dt) {
-    if (msgTimer > 0 && (msgTimer -= dt) <= 0) hideMsg();
+    if (msgTimer > 0 && (msgTimer -= dt) <= 0) nextMsg();
     if (modernOn() && state !== 'paused') modern.update(dt);
     if (state !== 'serve' && state !== 'play') return;
 
@@ -229,9 +244,12 @@
   }
 
   function movePaddles(dt) {
-    if (mode === 'com') {
+    if (demo) {
+      updateAI(left, dt);
+      updateAI(right, dt);
+    } else if (mode === 'com') {
       drive(left, axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']), touch.left, dt);
-      updateAI(dt);
+      updateAI(right, dt);
     } else {
       drive(left, axis(['KeyW'], ['KeyS']), touch.left, dt);
       drive(right, axis(['ArrowUp'], ['ArrowDown']), touch.right, dt);
@@ -248,21 +266,24 @@
     else if (touchY !== null) moveToward(p, touchY - p.h / 2, TOUCH_SPEED * dt);
   }
 
-  function rollAiError() {
-    ai.error = (Math.random() * 2 - 1) * PADDLE_H * 0.45;
+  function rollAiError(side) {
+    ai[side].error = (Math.random() * 2 - 1) * PADDLE_H * 0.45;
   }
 
-  function updateAI(dt) {
+  function updateAI(p, dt) {
+    const side = sideOf(p);
+    const s = ai[side];
+    const toward = side === 'right' ? 1 : -1;
     const f = difficulty();
-    if ((ai.timer -= dt) <= 0) {
-      ai.timer = AI_REACTION / f;
+    if ((s.timer -= dt) <= 0) {
+      s.timer = AI_REACTION / f;
       // Persigue la bola que llega más cerca; las bolas fantasma pueden engañarla
-      const incoming = [ball, ...(modernOn() ? powerups.ghosts : [])].filter((b) => b.vx > 0);
-      const chase = incoming.sort((a, b) => b.x - a.x)[0];
-      ai.target = chase ? chase.y + BALL_SIZE / 2 + ai.error : H / 2;
+      const incoming = [ball, ...(modernOn() ? powerups.ghosts : [])].filter((b) => b.vx * toward > 0);
+      const chase = incoming.sort((a, b) => (b.x - a.x) * toward)[0];
+      s.target = chase ? chase.y + BALL_SIZE / 2 + s.error : H / 2;
     }
-    if (right.frozen > 0) return;
-    moveToward(right, ai.target - right.h / 2, AI_SPEED * f * dt);
+    if (p.frozen > 0) return;
+    moveToward(p, s.target - p.h / 2, AI_SPEED * f * dt);
   }
 
   function overlaps(p) {
@@ -271,7 +292,7 @@
   }
 
   function hit(p, dir) {
-    const side = p === left ? 'left' : 'right';
+    const side = sideOf(p);
     const rel = clamp((ball.y + BALL_SIZE / 2 - (p.y + p.h / 2)) / (p.h / 2 + BALL_SIZE / 2), -1, 1);
     const angle = rel * Math.PI / 3;
     let speed = Math.min(Math.hypot(ball.vx, ball.vy) * BALL_ACCEL, BALL_MAX_SPEED * difficulty());
@@ -279,7 +300,7 @@
     ball.vx = Math.cos(angle) * speed * dir;
     ball.vy = Math.sin(angle) * speed;
     ball.x = dir > 0 ? p.x + PADDLE_W : p.x - BALL_SIZE;
-    if (dir > 0) rollAiError();
+    rollAiError(dir > 0 ? 'right' : 'left');
     sfx().hit(clamp((speed - BALL_SPEED) / (BALL_MAX_SPEED - BALL_SPEED), 0, 1));
     if (modernOn()) modern.onHit(side, dir);
   }
@@ -324,6 +345,11 @@
     else ctx.fillRect(x, y, w, h);
   }
 
+  // Rectángulo del campo convertido a coordenadas de pantalla (para sprites que no deben girar)
+  function toScreenRect(x, y, w, h) {
+    return portrait ? { x: y, y: W - x - w, w: h, h: w } : { x, y, w, h };
+  }
+
   function numberWidth(n, s) {
     return String(n).length * 4 * s - s;
   }
@@ -350,7 +376,7 @@
 
   function ballVisible() {
     const blinking = state === 'serve' && Math.floor(serveTimer * 6) % 2 === 1;
-    return state !== 'over' && state !== 'menu' && !blinking;
+    return state !== 'over' && !blinking;
   }
 
   function drawClassic() {
@@ -371,23 +397,19 @@
     if (ballVisible()) rect(ball.x, ball.y, BALL_SIZE, BALL_SIZE);
   }
 
-  // Rectángulo del campo convertido a coordenadas de pantalla (para sprites que no deben girar)
-  function toScreenRect(x, y, w, h) {
-    return portrait ? { x: y, y: W - x - w, w: h, h: w } : { x, y, w, h };
-  }
-
-  const playerName = (side) => (side === 'left' ? 'J1' : (mode === 'com' ? 'COM' : 'J2'));
-
   function draw() {
     if (modernOn()) modern.draw();
     else drawClassic();
   }
+
+  const playerName = (side) => (side === 'left' ? 'J1' : (mode === 'com' ? 'COM' : 'J2'));
 
   const powerups = window.PongPowerups({
     ctx, W, BALL_SIZE, PADDLE_H, BALL_SPEED, left, right, ball,
     get H() { return H; },
     get state() { return state; },
     fx: () => modern,
+    sfx: () => sfx(),
     rect, toScreenRect, playerName, showMsg,
   });
 
@@ -395,7 +417,8 @@
     ctx, W, PADDLE_W, BALL_SIZE, BALL_MAX_SPEED, left, right, ball, powerups,
     get H() { return H; },
     get state() { return state; },
-    rect, drawNumber, numberWidth, scoreBoxes, screenSize, ballVisible,
+    sfx: () => sfx(),
+    rect, toScreenRect, drawNumber, numberWidth, scoreBoxes, screenSize, ballVisible,
   });
 
   // --- Interfaz ---
@@ -404,7 +427,7 @@
     $('hud').classList.toggle('hidden', name === 'menu');
     $('btn-pause').classList.toggle('hidden', name !== 'game');
     $('quit-msg').classList.add('hidden');
-    screenEl.classList.toggle('modern', modernOn() && name !== 'menu');
+    screenEl.classList.toggle('modern', modernOn());
   }
 
   function updateHud() {
@@ -413,22 +436,45 @@
       : `2 JUGADORES · A ${WIN_SCORE}`;
   }
 
+  // Los mensajes se muestran en cola para que uno no tape a otro (p. ej. NIVEL y AYUDA en el mismo gol)
+  const msgQueue = [];
+  const MAX_QUEUED_MSGS = 3;
+
   function showMsg(text, seconds) {
+    if (demo) return;
+    msgQueue.push([text, seconds]);
+    if (msgQueue.length > MAX_QUEUED_MSGS) msgQueue.shift();
+    if (msgTimer <= 0) nextMsg();
+  }
+
+  function nextMsg() {
     const el = $('msg');
-    el.textContent = text;
+    const next = msgQueue.shift();
+    if (!next) {
+      el.classList.add('hidden');
+      msgTimer = 0;
+      return;
+    }
+    el.textContent = next[0];
     el.classList.remove('hidden');
-    msgTimer = seconds;
+    msgTimer = next[1];
   }
 
   function hideMsg() {
+    msgQueue.length = 0;
     $('msg').classList.add('hidden');
     msgTimer = 0;
   }
 
   // Botones de opción del menú (modo de juego y estilo visual)
   function select(group, value) {
-    if (group === 'mode') mode = value;
-    else style = value;
+    if (group === 'mode') {
+      mode = value;
+    } else if (style !== value) {
+      style = value;
+      if (demo) resetMatch(); // la demo de fondo arranca de nuevo con el estilo elegido
+      screenEl.classList.toggle('modern', modernOn());
+    }
     document.querySelectorAll(`[data-${group}]`).forEach((b) => b.classList.toggle('selected', b.dataset[group] === value));
   }
 
@@ -442,6 +488,7 @@
     setTimeout(() => $('quit-msg').classList.remove('hidden'), 150);
   }
 
+  $('version').textContent = `VERSIÓN ${window.PONG_VERSION}`;
   document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => select('mode', b.dataset.mode)));
   document.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', () => select('style', b.dataset.style)));
   $('btn-start').addEventListener('click', newGame);
@@ -457,10 +504,10 @@
 
   // Botón "atrás" de Android: devuelve true si el juego lo gestionó
   window.onAndroidBack = () => {
+    if (demo) return false;
     if (state === 'play' || state === 'serve') pause();
     else if (state === 'paused') resume();
     else if (state === 'over') toMenu();
-    else return false;
     return true;
   };
 
@@ -475,7 +522,7 @@
       window.PongAudio.setMuted(muted);
       return;
     }
-    if (state === 'menu') {
+    if (demo) {
       if (e.code === 'Digit1' || e.code === 'Numpad1') select('mode', 'com');
       else if (e.code === 'Digit2' || e.code === 'Numpad2') select('mode', '2p');
       else if (e.code === 'KeyC') select('style', 'classic');
@@ -520,7 +567,7 @@
   }
 
   function onPointerDown(e) {
-    if (state !== 'play' && state !== 'serve') return;
+    if (demo || (state !== 'play' && state !== 'serve')) return;
     if (e.target.closest && e.target.closest('button')) return;
     const p = readPointer(e);
     const side = mode === '2p' ? p.side : 'left';
@@ -560,6 +607,6 @@
   }
 
   layout();
-  resetField();
+  toMenu();
   requestAnimationFrame(frame);
 })();

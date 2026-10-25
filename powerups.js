@@ -5,7 +5,7 @@ window.PongPowerups = (api) => {
   'use strict';
 
   const { W, BALL_SIZE, PADDLE_H, BALL_SPEED, left, right, ball } = api;
-  const sfx = () => window.PongAudio.modern;
+  const sfx = () => api.sfx();
 
   const GIFT = BALL_SIZE * 4; // el regalo mide 4 veces la pelota
   const GIFT_LIFE = 12;
@@ -15,6 +15,8 @@ window.PongPowerups = (api) => {
   const SLOW_FACTOR = 0.4;
   const BALLOON_COUNT = 10, BALLOON_LIFE = 15;
   const RESIZE_SPEED = 60;
+  const COMEBACK_GAP = 5, COMEBACK_BOOST = 1.5; // ayuda al que pierde de 5: paleta +50% hasta empatar
+  const MAX_SIZE_MULT = 2.5; // tope si se juntan ayuda y Gigante
   const MAX_STEP = 1 / 240;
 
   const TYPES = [
@@ -74,6 +76,21 @@ window.PongPowerups = (api) => {
     for (const p of [left, right]) {
       p.h = PADDLE_H;
       p.giant = p.mini = p.frozen = p.shield = 0;
+      p.boost = false;
+    }
+  }
+
+  // Tras cada gol: activa la ayuda a quien pierde de 5 o más y la retira cuando empata
+  function checkComeback() {
+    for (const [p, rival, side] of [[left, right, 'left'], [right, left, 'right']]) {
+      if (!p.boost && rival.score - p.score >= COMEBACK_GAP) {
+        p.boost = true;
+        api.showMsg(`¡AYUDA PARA ${api.playerName(side)}!`, 1.8);
+        api.fx().burst(p.x + 2, p.y + p.h / 2, ['#ffe46b', '#ffffff'], 24, 90);
+        sfx().boost();
+      } else if (p.boost && p.score >= rival.score) {
+        p.boost = false;
+      }
     }
   }
 
@@ -109,7 +126,7 @@ window.PongPowerups = (api) => {
       case 'giant': me.giant = GIANT_TIME; me.mini = 0; break;
       case 'mini': rival.mini = MINI_TIME; rival.giant = 0; break;
       case 'shield': me.shield = SHIELD_TIME; break;
-      case 'freeze': rival.frozen = FREEZE_TIME; break;
+      case 'freeze': rival.frozen = FREEZE_TIME; api.fx().startIce(); break;
       case 'balloons': spawnBalloons(); break;
     }
     api.fx().burst(g.x + GIFT / 2, g.y + GIFT / 2, [...g.colors, '#ffffff'], 30, 110);
@@ -238,7 +255,8 @@ window.PongPowerups = (api) => {
       p.mini = Math.max(0, p.mini - dt);
       p.frozen = Math.max(0, p.frozen - dt);
       p.shield = Math.max(0, p.shield - dt);
-      const target = PADDLE_H * (p.giant > 0 ? 2 : 1) * (p.mini > 0 ? 0.5 : 1);
+      const mult = (p.giant > 0 ? 2 : 1) * (p.mini > 0 ? 0.5 : 1) * (p.boost ? COMEBACK_BOOST : 1);
+      const target = PADDLE_H * Math.min(mult, MAX_SIZE_MULT);
       if (p.h !== target) {
         const old = p.h;
         p.h += clamp(target - p.h, -RESIZE_SPEED * dt, RESIZE_SPEED * dt);
@@ -399,7 +417,7 @@ window.PongPowerups = (api) => {
   }
 
   return {
-    reset, update, collide, checkShield, adjustHitSpeed, onGoal, drawUnder, drawGhosts,
+    reset, update, collide, checkShield, adjustHitSpeed, onGoal, checkComeback, drawUnder, drawGhosts,
     get ghosts() { return ghosts; },
     get gifts() { return gifts; },
     get balloons() { return balloons; },

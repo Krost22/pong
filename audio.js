@@ -152,6 +152,23 @@ window.PongAudio = (() => {
       noise({ dur: 0.06, vol: 0.3, filter: 'highpass', f0: 1800 });
       tone({ type: 'sine', f0: 900, f1: 200, dur: 0.07, vol: 0.15 });
     }),
+    // Gol con la pelota en llamas: explosión larga y crepitar del fuego
+    fireGoal: sound(() => {
+      tone({ type: 'sine', f0: 90, f1: 25, dur: 1.1, vol: 0.55 });
+      noise({ dur: 1.2, vol: 0.3, filter: 'lowpass', f0: 2500, f1: 120, attack: 0.01 });
+      for (let i = 0; i < 10; i++) noise({ dur: 0.03, vol: 0.12, filter: 'highpass', f0: 2500, at: 0.15 + Math.random() * 1.2 });
+    }),
+    // El hielo se derrite y vuelve el césped
+    thaw: sound(() => {
+      [88, 84, 79, 76].forEach((n, i) => tone({ type: 'sine', f0: note(n), f1: note(n - 2), dur: 0.2, vol: 0.07, at: 0.6 + i * 0.08 }));
+    }),
+    // Ayuda al que va perdiendo: acorde ascendente brillante
+    boost: sound(() => {
+      [[67, 0], [71, 0.1], [74, 0.2], [79, 0.3]].forEach(([n, at]) => {
+        tone({ type: 'triangle', f0: note(n), dur: 0.5, vol: 0.12, at: 0.4 + at });
+        tone({ type: 'sine', f0: note(n + 12), dur: 0.4, vol: 0.05, at: 0.4 + at });
+      });
+    }),
     // Pequeña fanfarria
     win: sound(() => {
       const melody = [[67, 0, 0.15], [72, 0.15, 0.15], [76, 0.3, 0.15], [79, 0.45, 0.3], [76, 0.78, 0.15], [79, 0.93, 0.6]];
