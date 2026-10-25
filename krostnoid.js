@@ -1,4 +1,4 @@
-// KrostNoid: rompeladrillos estilo Arkanoid con niveles, cápsulas de poder y récords.
+// KrostNoid: rompeladrillos estilo Arkanoid con niveles, cápsulas de poder, naves enemigas, combos y récords.
 // Comparte el canvas con Pong pero trabaja en coordenadas de pantalla (no gira): la paleta siempre va abajo.
 // game.js crea la instancia (api) y le pasa la entrada; este módulo solo simula y dibuja.
 window.PongKrostnoid = (api) => {
@@ -9,13 +9,18 @@ window.PongKrostnoid = (api) => {
 
   const COLS = 12, TOP = 20, SIDE = 4, BRICK_H = 7;
   const PADDLE_BOTTOM = 10, PADDLE_H = 4, PADDLE_W = 30, PADDLE_W_BIG = 46;
-  const PADDLE_SPEED = 230, TOUCH_SPEED = 1400, RESIZE_SPEED = 60;
-  const BALL = 4, BALL_SPEED = 120, BALL_MAX = 230, LEVEL_SPEEDUP = 0.08;
+  const PADDLE_SPEED = 300, TOUCH_SPEED = 1600, RESIZE_SPEED = 80;
+  const BALL = 4, BALL_SPEED = 150, BALL_MAX = 290, LEVEL_SPEEDUP = 0.1;
+  const HIT_SPEEDUP = 1.015; // cada rebote en la paleta acelera la bola un poco
   const MIN_ANGLE = 0.18; // radianes respecto a la vertical
   const START_LIVES = 3, MAX_LIVES = 5;
-  const CAPSULE_CHANCE = 0.18, CAPSULE_SPEED = 45, CAPSULE_W = 12, CAPSULE_H = 6;
-  const EXPAND_TIME = 15, LASER_TIME = 10, LASER_RATE = 0.35, LASER_SPEED = 240;
-  const AUTO_LAUNCH = 2.5, CLEAR_PAUSE = 1.8;
+  const CAPSULE_CHANCE = 0.24, CAPSULE_SPEED = 60, CAPSULE_W = 12, CAPSULE_H = 6;
+  const EXPAND_TIME = 15, LASER_TIME = 10, LASER_RATE = 0.3, LASER_SPEED = 260;
+  const FIRE_TIME = 8, BOMB_HITS = 3, BARRIER_TIME = 15;
+  const AUTO_LAUNCH = 1.8, CLEAR_PAUSE = 1.6, ENTRY_TIME = 0.9;
+  // Naves enemigas: aparecen cada cierto tiempo y cruzan la pantalla
+  const SHIP_FIRST = 5, SHIP_MIN = 8, SHIP_MAX = 14;
+  const UFO_POINTS = 300, BOMBER_POINTS = 400, BOMB_RATE = 1.2, BOMB_SPEED = 75, STUN_TIME = 0.8;
   const MAX_STEP = 1 / 240;
 
   // 12 columnas. 1-6 = colores (1 golpe), S = plata (2 golpes), G = oro (indestructible), . = vacío
@@ -82,17 +87,28 @@ window.PongKrostnoid = (api) => {
     { id: 'L', name: 'LÁSER', colors: ['#ff5a4f', '#a8261f'] },
     { id: 'S', name: 'LENTO', colors: ['#ffd23f', '#c99a12'] },
     { id: 'V', name: 'VIDA EXTRA', colors: ['#ff8fd8', '#c2559f'] },
+    { id: 'F', name: 'BOLA DE FUEGO', colors: ['#ff8a2a', '#b84a12'] },
+    { id: 'X', name: 'BOLA EXPLOSIVA', colors: ['#b07cff', '#6f45b8'] },
+    { id: 'B', name: 'BARRERA', colors: ['#7fe8ff', '#2a8fb0'] },
   ];
   // Letras de 3x5 para las cápsulas
   const GLYPHS = {
     E: '111100111100111', M: '101111111101101', L: '100100100100111', S: '111100111001111', V: '101101101101010',
+    F: '111100110100100', X: '101101010101101', B: '110101110101110',
+  };
+  const COMBO_STEPS = [5, 10, 15, 25]; // avisos de combo
+  const SHIPS = {
+    ufo: { w: 14, h: 6, speed: 55, points: UFO_POINTS, name: '¡OVNI!' },
+    bomber: { w: 12, h: 6, speed: 45, points: BOMBER_POINTS, name: '¡BOMBARDERO!' },
   };
 
-  let bricks = [], balls = [], capsules = [], lasers = [], particles = [], stars = [];
-  let level = 0, lives = START_LIVES, score = 0;
-  const paddle = { x: 0, w: PADDLE_W, expand: 0, laser: 0, cooldown: 0, flash: 0 };
+  let bricks = [], balls = [], capsules = [], lasers = [], particles = [], stars = [], ships = [], bombs = [];
+  let level = 0, lives = START_LIVES, score = 0, combo = 0;
+  const paddle = { x: 0, w: PADDLE_W, expand: 0, laser: 0, cooldown: 0, flash: 0, stun: 0 };
+  // Efectos de bola: fire = atraviesa ladrillos; bombs = golpes explosivos que quedan; barrier = suelo protegido
+  const power = { fire: 0, bombs: 0, barrier: 0 };
   let size = { w: 0, h: 0 };
-  let stuckTimer = 0, clearing = 0, shake = 0, time = 0;
+  let stuckTimer = 0, clearing = 0, shake = 0, time = 0, entry = 0, shipTimer = SHIP_FIRST;
   let demo = false, hintShown = false;
   let hud = '';
 
@@ -102,17 +118,21 @@ window.PongKrostnoid = (api) => {
   const snap = api.snap;
   const fill = (x, y, w, h) => ctx.fillRect(snap(x), snap(y), w, h);
   const paddleY = () => size.h - PADDLE_BOTTOM;
-  const speed = () => Math.min(BALL_SPEED * (1 + LEVEL_SPEEDUP * level), BALL_MAX);
+  const maxSpeed = () => Math.min(BALL_MAX * (1 + LEVEL_SPEEDUP * level), BALL_MAX * 1.4);
+  const speed = () => Math.min(BALL_SPEED * (1 + LEVEL_SPEEDUP * level), maxSpeed());
 
   // --- Geometría (se recalcula si cambia el tamaño o la orientación) ---
   function brickW() {
     return Math.floor((size.w - SIDE * 2) / COLS);
   }
 
+  // Al empezar un nivel los ladrillos caen desde arriba, fila a fila
   function brickRect(b) {
     const bw = brickW();
     const left = Math.floor((size.w - bw * COLS) / 2);
-    return { x: left + b.c * bw, y: TOP + b.r * BRICK_H, w: bw, h: BRICK_H };
+    const k = clamp((ENTRY_TIME - entry) / ENTRY_TIME * 1.6 - b.r * 0.08, 0, 1);
+    const drop = entry > 0 ? (1 - k * k * (3 - 2 * k)) * -(TOP + 70) : 0;
+    return { x: left + b.c * bw, y: TOP + b.r * BRICK_H + drop, w: bw, h: BRICK_H };
   }
 
   function syncSize() {
@@ -121,13 +141,13 @@ window.PongKrostnoid = (api) => {
     if (size.w) {
       const rx = s.w / size.w, ry = s.h / size.h;
       paddle.x *= rx;
-      for (const list of [balls, capsules, lasers, particles]) {
+      for (const list of [balls, capsules, lasers, particles, ships, bombs]) {
         for (const o of list) { o.x *= rx; o.y *= ry; }
       }
     }
     size = { w: s.w, h: s.h };
     stars = [];
-    for (let i = 0; i < 70; i++) stars.push({ x: Math.floor(rand(0, size.w)), y: Math.floor(rand(0, size.h)), phase: rand(0, 6), big: Math.random() < 0.15 });
+    for (let i = 0; i < 70; i++) stars.push({ x: Math.floor(rand(0, size.w)), y: Math.floor(rand(0, size.h)), phase: rand(0, 6), big: Math.random() < 0.15, speed: rand(4, 14) });
   }
 
   // --- Partida ---
@@ -154,17 +174,24 @@ window.PongKrostnoid = (api) => {
     }));
     capsules = [];
     lasers = [];
+    ships = [];
+    bombs = [];
     clearing = 0;
-    resetPaddle();
+    entry = ENTRY_TIME;
+    shipTimer = SHIP_FIRST;
+    resetPowers();
     newBall();
+    stuckTimer = AUTO_LAUNCH + ENTRY_TIME;
     api.showMsg(`NIVEL ${n + 1}`, 1.5);
   }
 
-  function resetPaddle() {
-    paddle.expand = paddle.laser = 0;
+  function resetPowers() {
+    paddle.expand = paddle.laser = paddle.stun = 0;
+    power.fire = power.bombs = power.barrier = 0;
   }
 
   function newBall() {
+    combo = 0;
     balls = [{ x: paddle.x - BALL / 2, y: paddleY() - BALL, vx: 0, vy: 0, stuck: true, offset: rand(-6, 6), trail: [] }];
     stuckTimer = AUTO_LAUNCH;
     if (!demo && !hintShown) {
@@ -174,6 +201,7 @@ window.PongKrostnoid = (api) => {
   }
 
   function launch() {
+    if (entry > 0) return;
     for (const b of balls) {
       if (!b.stuck) continue;
       b.stuck = false;
@@ -188,7 +216,7 @@ window.PongKrostnoid = (api) => {
     lives--;
     shake = 0.4;
     sfx().lifeLost();
-    resetPaddle();
+    resetPowers();
     if (lives <= 0) {
       if (demo) start(true);
       else api.onGameOver(score, level + 1);
@@ -197,7 +225,7 @@ window.PongKrostnoid = (api) => {
     newBall();
   }
 
-  // --- Ladrillos y cápsulas ---
+  // --- Ladrillos, combos y cápsulas ---
   function burst(x, y, colors, n, sp) {
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2), v = rand(sp * 0.3, sp);
@@ -205,7 +233,19 @@ window.PongKrostnoid = (api) => {
     }
   }
 
-  function damage(br) {
+  function addScore(points) {
+    // El combo (ladrillos seguidos sin tocar la paleta) multiplica: x2 desde 5, x3 desde 10...
+    const mult = 1 + Math.floor(combo / 5);
+    score += points * mult;
+  }
+
+  function dropCapsule(x, y, forced = false) {
+    if (capsules.length >= 2 || (!forced && Math.random() >= CAPSULE_CHANCE)) return;
+    const type = pick(lives >= MAX_LIVES ? CAPSULES.filter((k) => k.id !== 'V') : CAPSULES);
+    capsules.push({ x: x - CAPSULE_W / 2, y, type, t: 0 });
+  }
+
+  function damage(br, explosive = false) {
     const def = BRICKS[br.type];
     br.flash = 0.12;
     if (def.hits === Infinity) {
@@ -218,19 +258,36 @@ window.PongKrostnoid = (api) => {
     }
     bricks.splice(bricks.indexOf(br), 1);
     const r = brickRect(br);
-    score += Math.round(def.points * (1 + level * 0.1));
-    burst(r.x + r.w / 2, r.y + r.h / 2, def.colors, 12, 70);
+    combo++;
+    if (COMBO_STEPS.includes(combo)) {
+      api.showMsg(`¡COMBO x${1 + Math.floor(combo / 5)}!`, 1);
+      sfx().combo();
+    }
+    addScore(Math.round(def.points * (1 + level * 0.1)));
+    burst(r.x + r.w / 2, r.y + r.h / 2, def.colors, explosive ? 18 : 12, explosive ? 110 : 70);
+    shake = Math.max(shake, explosive ? 0.25 : 0.05);
     sfx().brick(br.r);
-    if (!capsules.length && Math.random() < CAPSULE_CHANCE) {
-      const type = pick(lives >= MAX_LIVES ? CAPSULES.filter((k) => k.id !== 'V') : CAPSULES);
-      capsules.push({ x: r.x + r.w / 2 - CAPSULE_W / 2, y: r.y, type, t: 0 });
-    }
-    if (!bricks.some((b) => b.type !== 'G')) {
-      clearing = CLEAR_PAUSE;
-      balls = [];
-      api.showMsg('¡NIVEL SUPERADO!', 1.5);
-      sfx().levelClear();
-    }
+    dropCapsule(r.x + r.w / 2, r.y);
+    if (!bricks.some((b) => b.type !== 'G')) levelCleared();
+  }
+
+  // Bola explosiva: rompe también los ladrillos de alrededor
+  function explode(br) {
+    const r = brickRect(br);
+    burst(r.x + r.w / 2, r.y + r.h / 2, ['#ffffff', '#ffd23f', '#ff7a1f', '#b07cff'], 30, 140);
+    sfx().boom();
+    const around = bricks.filter((b) => b !== br && Math.abs(b.c - br.c) <= 1 && Math.abs(b.r - br.r) <= 1 && b.type !== 'G');
+    damage(br, true);
+    for (const b of around) if (bricks.includes(b) && clearing <= 0) damage(b, true);
+  }
+
+  function levelCleared() {
+    clearing = CLEAR_PAUSE;
+    balls = [];
+    ships = [];
+    bombs = [];
+    api.showMsg('¡NIVEL SUPERADO!', 1.5);
+    sfx().levelClear();
   }
 
   function applyCapsule(type) {
@@ -241,6 +298,9 @@ window.PongKrostnoid = (api) => {
       case 'E': paddle.expand = EXPAND_TIME; break;
       case 'L': paddle.laser = LASER_TIME; paddle.cooldown = 0; break;
       case 'V': lives = Math.min(MAX_LIVES, lives + 1); break;
+      case 'F': power.fire = FIRE_TIME; break;
+      case 'X': power.bombs = BOMB_HITS; break;
+      case 'B': power.barrier = BARRIER_TIME; break;
       case 'S':
         for (const b of balls) {
           const s = Math.hypot(b.vx, b.vy) || 1;
@@ -264,10 +324,74 @@ window.PongKrostnoid = (api) => {
     }
   }
 
+  // --- Naves enemigas ---
+  function spawnShip() {
+    const kind = Math.random() < 0.55 ? 'ufo' : 'bomber';
+    const def = SHIPS[kind];
+    const fromLeft = Math.random() < 0.5;
+    const bricksBottom = TOP + Math.max(...bricks.map((b) => b.r), 0) * BRICK_H + BRICK_H;
+    const y = kind === 'bomber'
+      ? clamp(bricksBottom + 6, 16, paddleY() - 50)
+      : rand(bricksBottom + 8, Math.max(bricksBottom + 10, paddleY() - 35));
+    ships.push({ kind, x: fromLeft ? -def.w : size.w, y, baseY: y, w: def.w, h: def.h, vx: (fromLeft ? 1 : -1) * def.speed * (1 + level * 0.05), t: 0, bombCd: BOMB_RATE });
+    api.showMsg(def.name, 1);
+    sfx().ufo();
+  }
+
+  function destroyShip(s) {
+    ships.splice(ships.indexOf(s), 1);
+    addScore(SHIPS[s.kind].points);
+    burst(s.x + s.w / 2, s.y + s.h / 2, ['#ffffff', '#ffd23f', '#ff5a4f', '#7ee05a'], 34, 150);
+    shake = Math.max(shake, 0.3);
+    sfx().boom();
+    api.showMsg(`+${SHIPS[s.kind].points}`, 0.8);
+    if (s.kind === 'ufo') dropCapsule(s.x + s.w / 2, s.y, true); // el ovni siempre suelta una cápsula
+  }
+
+  function updateShips(dt) {
+    if ((shipTimer -= dt) <= 0 && entry <= 0) {
+      shipTimer = rand(SHIP_MIN, SHIP_MAX) / (1 + level * 0.1);
+      if (ships.length < 2) spawnShip();
+    }
+    for (let k = ships.length - 1; k >= 0; k--) {
+      const s = ships[k];
+      s.t += dt;
+      s.x += s.vx * dt;
+      s.y = s.baseY + Math.sin(s.t * 3) * (s.kind === 'ufo' ? 6 : 2);
+      if (s.kind === 'bomber' && (s.bombCd -= dt) <= 0 && s.x > 0 && s.x < size.w - s.w) {
+        s.bombCd = BOMB_RATE;
+        bombs.push({ x: s.x + s.w / 2 - 1, y: s.y + s.h, t: 0 });
+        sfx().bombDrop();
+      }
+      if ((s.vx > 0 && s.x > size.w + 2) || (s.vx < 0 && s.x < -s.w - 2)) ships.splice(k, 1);
+    }
+    for (let k = bombs.length - 1; k >= 0; k--) {
+      const b = bombs[k];
+      b.y += BOMB_SPEED * dt;
+      b.t += dt;
+      const py = paddleY();
+      if (b.y + 3 >= py && b.y <= py + PADDLE_H && b.x + 3 >= paddle.x - paddle.w / 2 && b.x <= paddle.x + paddle.w / 2) {
+        bombs.splice(k, 1);
+        paddle.stun = STUN_TIME; // la paleta queda aturdida un momento
+        shake = Math.max(shake, 0.35);
+        burst(b.x + 1, py, ['#ff5a4f', '#ffd23f', '#ffffff'], 20, 90);
+        sfx().stun();
+      } else if (b.y > size.h) {
+        bombs.splice(k, 1);
+      }
+    }
+  }
+
+  function shipHit(x, y, w, h) {
+    return ships.find((s) => x + w > s.x && x < s.x + s.w && y + h > s.y && y < s.y + s.h);
+  }
+
   // --- Simulación ---
   function movePaddle(dt) {
     let target = null;
-    if (demo) {
+    if (paddle.stun > 0) {
+      paddle.stun -= dt;
+    } else if (demo) {
       // La demo sigue a la bola que más baja y apunta un poco a un lado para variar el ángulo
       const falling = balls.filter((b) => !b.stuck && b.vy > 0).sort((a, b) => b.y - a.y)[0];
       target = falling ? falling.x + BALL / 2 + Math.sin(time) * paddle.w * 0.3 : size.w / 2;
@@ -290,7 +414,7 @@ window.PongKrostnoid = (api) => {
     else if (b.x > size.w - BALL) { b.x = size.w - BALL; b.vx = -Math.abs(b.vx); sfx().wall(); }
     if (b.y < 0) { b.y = 0; b.vy = Math.abs(b.vy); sfx().wall(); }
 
-    // Paleta: el ángulo depende de dónde golpea (hasta 60°)
+    // Paleta: el ángulo depende de dónde golpea (hasta 60°) y cada golpe acelera un poco la bola
     const py = paddleY();
     if (b.vy > 0 && b.y + BALL >= py && b.y + BALL <= py + PADDLE_H + 3 &&
         b.x + BALL > paddle.x - paddle.w / 2 && b.x < paddle.x + paddle.w / 2) {
@@ -298,23 +422,49 @@ window.PongKrostnoid = (api) => {
       let a = rel * Math.PI / 3;
       // Nunca totalmente vertical: evita bucles infinitos arriba-abajo por la misma columna
       if (Math.abs(a) < MIN_ANGLE) a = (rel < 0 || (rel === 0 && Math.random() < 0.5) ? -1 : 1) * MIN_ANGLE;
-      const s = Math.max(Math.hypot(b.vx, b.vy), BALL_SPEED * 0.8);
+      const s = clamp(Math.hypot(b.vx, b.vy) * HIT_SPEEDUP, BALL_SPEED * 0.8, maxSpeed());
       b.vx = Math.sin(a) * s;
       b.vy = -Math.cos(a) * s;
       b.y = py - BALL;
       paddle.flash = 0.12;
+      combo = 0;
       sfx().hit(clamp((s - BALL_SPEED) / (BALL_MAX - BALL_SPEED), 0, 1));
     }
 
-    // Ladrillos: rebota por el lado de menor penetración
+    // Barrera: salva la bola una vez y desaparece
+    if (power.barrier > 0 && b.vy > 0 && b.y + BALL >= size.h - 3) {
+      power.barrier = 0;
+      b.vy = -Math.abs(b.vy);
+      b.y = size.h - 3 - BALL;
+      burst(b.x + 2, size.h - 3, ['#7fe8ff', '#ffffff'], 20, 90);
+      sfx().block();
+    }
+
+    // Naves: la bola las destruye y rebota
+    const ship = shipHit(b.x, b.y, BALL, BALL);
+    if (ship) {
+      b.vy = -b.vy;
+      destroyShip(ship);
+    }
+
+    // Ladrillos: rebota por el lado de menor penetración (la bola de fuego los atraviesa)
     for (const br of bricks) {
       const r = brickRect(br);
       if (b.x + BALL <= r.x || b.x >= r.x + r.w || b.y + BALL <= r.y || b.y >= r.y + r.h) continue;
-      const ox = Math.min(b.x + BALL - r.x, r.x + r.w - b.x);
-      const oy = Math.min(b.y + BALL - r.y, r.y + r.h - b.y);
-      if (ox < oy) b.vx = (b.x + BALL / 2 < r.x + r.w / 2 ? -1 : 1) * Math.abs(b.vx);
-      else b.vy = (b.y + BALL / 2 < r.y + r.h / 2 ? -1 : 1) * Math.abs(b.vy);
-      damage(br);
+      const pierce = power.fire > 0 && br.type !== 'G';
+      if (!pierce) {
+        const ox = Math.min(b.x + BALL - r.x, r.x + r.w - b.x);
+        const oy = Math.min(b.y + BALL - r.y, r.y + r.h - b.y);
+        if (ox < oy) b.vx = (b.x + BALL / 2 < r.x + r.w / 2 ? -1 : 1) * Math.abs(b.vx);
+        else b.vy = (b.y + BALL / 2 < r.y + r.h / 2 ? -1 : 1) * Math.abs(b.vy);
+      }
+      if (power.bombs > 0 && br.type !== 'G') {
+        power.bombs--;
+        explode(br);
+      } else {
+        if (pierce) br.hits = 1; // el fuego rompe de un golpe
+        damage(br);
+      }
       break;
     }
   }
@@ -323,8 +473,10 @@ window.PongKrostnoid = (api) => {
     syncSize();
     time += dt;
     shake = Math.max(0, shake - dt);
+    entry = Math.max(0, entry - dt);
     paddle.flash = Math.max(0, paddle.flash - dt);
     for (const br of bricks) br.flash = Math.max(0, br.flash - dt);
+    for (const s of stars) s.y = (s.y + s.speed * dt) % size.h; // las estrellas se desplazan: sensación de velocidad
     for (let k = particles.length - 1; k >= 0; k--) {
       const p = particles[k];
       p.x += p.vx * dt;
@@ -342,6 +494,8 @@ window.PongKrostnoid = (api) => {
     movePaddle(dt);
     paddle.expand = Math.max(0, paddle.expand - dt);
     paddle.laser = Math.max(0, paddle.laser - dt);
+    power.fire = Math.max(0, power.fire - dt);
+    power.barrier = Math.max(0, power.barrier - dt);
 
     // Láser: dispara solo, dos rayos desde los extremos de la paleta
     if (paddle.laser > 0 && (paddle.cooldown -= dt) <= 0) {
@@ -361,7 +515,10 @@ window.PongKrostnoid = (api) => {
     for (const b of balls) {
       if (b.stuck) continue;
       b.trail.push({ x: b.x, y: b.y });
-      if (b.trail.length > 6) b.trail.shift();
+      if (b.trail.length > 8) b.trail.shift();
+      if (power.fire > 0 && Math.random() < 0.6) {
+        particles.push({ x: b.x + rand(0, BALL), y: b.y + rand(0, BALL), vx: rand(-15, 15), vy: rand(-15, 15), life: 0.3, max: 0.3, color: pick(['#ffd23f', '#ff7a1f', '#ff5a1f']) });
+      }
       for (let t = dt; t > 0 && clearing <= 0; t -= MAX_STEP) stepBall(b, Math.min(t, MAX_STEP));
     }
     if (clearing > 0) return;
@@ -370,6 +527,8 @@ window.PongKrostnoid = (api) => {
       loseLife();
       return;
     }
+
+    updateShips(dt);
 
     for (let k = capsules.length - 1; k >= 0; k--) {
       const c = capsules[k];
@@ -387,6 +546,12 @@ window.PongKrostnoid = (api) => {
     for (let k = lasers.length - 1; k >= 0; k--) {
       const l = lasers[k];
       l.y -= LASER_SPEED * dt;
+      const ship = shipHit(l.x, l.y, 1, 3);
+      if (ship) {
+        lasers.splice(k, 1);
+        destroyShip(ship);
+        continue;
+      }
       const hitBrick = bricks.find((br) => {
         const r = brickRect(br);
         return l.x >= r.x && l.x < r.x + r.w && l.y < r.y + r.h && l.y + 3 > r.y;
@@ -401,7 +566,9 @@ window.PongKrostnoid = (api) => {
     }
 
     const best = api.record();
-    const text = `NIVEL ${level + 1} · VIDAS ${lives} · ${score} PTS` + (demo ? '' : ` · RÉCORD ${Math.max(best, score)}`);
+    const mult = 1 + Math.floor(combo / 5);
+    const text = `NIVEL ${level + 1} · VIDAS ${lives} · ${score} PTS` + (mult > 1 ? ` · COMBO x${mult}` : '') +
+      (demo ? '' : ` · RÉCORD ${Math.max(best, score)}`);
     if (text !== hud) {
       hud = text;
       api.setHud(text);
@@ -457,26 +624,69 @@ window.PongKrostnoid = (api) => {
     }
   }
 
+  function drawShip(s) {
+    const x = Math.round(s.x), y = Math.round(s.y);
+    const blink = Math.floor(time * 8) % 2;
+    if (s.kind === 'ufo') {
+      // Platillo: cúpula, disco y luces que parpadean
+      ctx.fillStyle = 'rgba(159, 230, 255, 0.8)';
+      ctx.fillRect(x + 4, y, 6, 2);
+      ctx.fillStyle = '#c8d0d8';
+      ctx.fillRect(x + 1, y + 2, 12, 2);
+      ctx.fillStyle = '#7d8894';
+      ctx.fillRect(x, y + 3, 14, 1);
+      ctx.fillRect(x + 3, y + 4, 8, 1);
+      ctx.fillStyle = blink ? '#ffd23f' : '#ff5a4f';
+      ctx.fillRect(x + 2, y + 3, 1, 1);
+      ctx.fillRect(x + 6, y + 3, 1, 1);
+      ctx.fillRect(x + 10, y + 3, 1, 1);
+      ctx.fillStyle = `rgba(159, 230, 255, ${0.15 + 0.1 * blink})`; // rayo tractor
+      ctx.fillRect(x + 4, y + 5, 6, 4);
+    } else {
+      // Bombardero: nave roja con alas y motor encendido
+      const dir = s.vx > 0 ? 1 : -1;
+      ctx.fillStyle = '#a8261f';
+      ctx.fillRect(x, y + 2, 12, 2);
+      ctx.fillStyle = '#ff5a4f';
+      ctx.fillRect(x + 2, y + 1, 8, 2);
+      ctx.fillRect(x + 4, y, 4, 1);
+      ctx.fillStyle = '#ffb3ad';
+      ctx.fillRect(x + (dir > 0 ? 8 : 3), y + 1, 1, 1); // cabina
+      ctx.fillStyle = '#7d8894';
+      ctx.fillRect(x + 3, y + 4, 2, 2);
+      ctx.fillRect(x + 7, y + 4, 2, 2);
+      ctx.fillStyle = blink ? '#ffd23f' : '#ff7a1f';
+      ctx.fillRect(dir > 0 ? x - 1 : x + 12, y + 2, 1, 2); // propulsor
+    }
+  }
+
   function drawPaddle() {
     const py = paddleY();
     const x = Math.round(paddle.x - paddle.w / 2), w = Math.round(paddle.w);
     const flash = paddle.flash > 0;
-    ctx.fillStyle = 'rgba(63, 167, 255, 0.25)'; // resplandor
+    const stunned = paddle.stun > 0;
+    ctx.fillStyle = stunned ? 'rgba(255, 90, 79, 0.35)' : 'rgba(63, 167, 255, 0.25)'; // resplandor
     fill(x - 2, py - 2, w + 4, PADDLE_H + 4);
+    const jitter = stunned ? Math.round(rand(-1, 1)) : 0;
     ctx.fillStyle = flash ? '#ffffff' : '#7d8894';
-    fill(x + 1, py, w - 2, PADDLE_H);
-    ctx.fillStyle = flash ? '#ffffff' : '#c8d0d8';
-    fill(x + 1, py, w - 2, PADDLE_H - 1);
+    fill(x + 1 + jitter, py, w - 2, PADDLE_H);
+    ctx.fillStyle = flash ? '#ffffff' : (stunned ? '#ffb3ad' : '#c8d0d8');
+    fill(x + 1 + jitter, py, w - 2, PADDLE_H - 1);
     ctx.fillStyle = '#f4f7fa';
-    fill(x + 4, py, w - 8, 1);
+    fill(x + 4 + jitter, py, w - 8, 1);
     // Extremos rojos (o cañones en modo láser)
     ctx.fillStyle = paddle.laser > 0 ? '#ffd23f' : '#ff5a4f';
-    fill(x, py, 4, PADDLE_H);
-    fill(x + w - 4, py, 4, PADDLE_H);
+    fill(x + jitter, py, 4, PADDLE_H);
+    fill(x + w - 4 + jitter, py, 4, PADDLE_H);
     if (paddle.laser > 0) {
       ctx.fillStyle = '#ff5a4f';
       fill(x + 1, py - 2, 2, 2);
       fill(x + w - 3, py - 2, 2, 2);
+    }
+    if (stunned) {
+      // Chispas de aturdido sobre la paleta
+      ctx.fillStyle = '#ffd23f';
+      for (let i = 0; i < 3; i++) fill(x + ((time * 40 + i * w / 3) % w), py - 3 - (i % 2), 1, 1);
     }
   }
 
@@ -491,7 +701,7 @@ window.PongKrostnoid = (api) => {
     for (const s of stars) {
       const on = Math.sin(time * 1.5 + s.phase);
       ctx.fillStyle = on > 0.6 ? '#ffffff' : '#3a4a7a';
-      ctx.fillRect(s.x, s.y, s.big ? 2 : 1, s.big ? 2 : 1);
+      ctx.fillRect(s.x, Math.round(s.y), s.big ? 2 : 1, s.big ? 2 : 1);
     }
     // Marco lateral metálico
     ctx.fillStyle = '#2a355e';
@@ -499,23 +709,37 @@ window.PongKrostnoid = (api) => {
     ctx.fillRect(0, 0, 1, size.h);
     ctx.fillRect(size.w - 1, 0, 1, size.h);
 
+    if (power.barrier > 0 && (power.barrier > 3 || Math.floor(time * 8) % 2)) {
+      ctx.fillStyle = `rgba(127, 232, 255, ${0.6 + 0.3 * Math.sin(time * 10)})`;
+      ctx.fillRect(0, size.h - 3, size.w, 2);
+    }
+
     for (const br of bricks) drawBrick(br);
     for (const c of capsules) drawCapsule(c);
+    for (const s of ships) drawShip(s);
+
+    for (const b of bombs) {
+      ctx.fillStyle = '#2a2d34';
+      fill(b.x, b.y, 3, 3);
+      ctx.fillStyle = Math.floor(b.t * 10) % 2 ? '#ff5a4f' : '#ffd23f'; // mecha
+      fill(b.x + 1, b.y - 1, 1, 1);
+    }
 
     ctx.fillStyle = '#ff7a7a';
     for (const l of lasers) fill(l.x, l.y, 1, 3);
 
     drawPaddle();
 
+    const fire = power.fire > 0;
     for (const b of balls) {
       b.trail.forEach((p, i) => {
-        ctx.fillStyle = `rgba(160, 200, 255, ${(i + 1) / b.trail.length * 0.4})`;
+        ctx.fillStyle = fire ? `rgba(255, 140, 50, ${(i + 1) / b.trail.length * 0.6})` : `rgba(160, 200, 255, ${(i + 1) / b.trail.length * 0.4})`;
         fill(p.x + 1, p.y + 1, 2, 2);
       });
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = fire ? '#ffd23f' : (power.bombs > 0 ? '#e2ccff' : '#ffffff');
       fill(b.x + 1, b.y, 2, 4);
       fill(b.x, b.y + 1, 4, 2);
-      ctx.fillStyle = '#9fb8d8';
+      ctx.fillStyle = fire ? '#ff5a1f' : (power.bombs > 0 ? '#b07cff' : '#9fb8d8');
       fill(b.x + 3, b.y + 2, 1, 1);
       fill(b.x + 2, b.y + 3, 1, 1);
     }
@@ -534,6 +758,9 @@ window.PongKrostnoid = (api) => {
     get score() { return score; },
     get balls() { return balls; },
     get level() { return level; },
+    get ships() { return ships; },
     get bricksLeft() { return bricks.filter((b) => b.type !== 'G').length; },
+    // Solo para pruebas y capturas
+    spawnShip, applyCapsule: (id) => applyCapsule(CAPSULES.find((c) => c.id === id)),
   };
 };

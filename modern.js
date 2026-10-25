@@ -62,6 +62,8 @@ window.PongModern = (api) => {
   const trail = [];
   const skates = [];   // marcas de la pelota sobre el hielo
   const scorches = []; // manchas de quemado
+  const heartFx = [];  // corazones del RogueLike que explotan o arden
+  const hudBits = [];  // sus partículas (coordenadas de pantalla)
   const paddleFlash = { left: 0, right: 0 };
   // t: 0 = césped, 1 = hielo; permanent = cancha de hielo fija (piso 2 del RogueLike)
   const ice = { on: false, t: 0, goalsLeft: 0, permanent: false };
@@ -143,6 +145,7 @@ window.PongModern = (api) => {
   function reset() {
     ensureField();
     sparks.length = confetti.length = waves.length = flashes.length = trail.length = skates.length = scorches.length = 0;
+    heartFx.length = hudBits.length = 0;
     paddleFlash.left = paddleFlash.right = 0;
     shake = 0;
     burning = false;
@@ -392,6 +395,17 @@ window.PongModern = (api) => {
       if ((c.life -= dt) <= 0) confetti.splice(k, 1);
     }
 
+    for (let k = heartFx.length - 1; k >= 0; k--) {
+      if ((heartFx[k].t += dt) > HEART_FX_TIME) heartFx.splice(k, 1);
+    }
+    for (let k = hudBits.length - 1; k >= 0; k--) {
+      const b = hudBits[k];
+      b.vy += b.g * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if ((b.life -= dt) <= 0) hudBits.splice(k, 1);
+    }
+
     for (const list of [skates, scorches]) {
       for (let k = list.length - 1; k >= 0; k--) {
         list[k].life -= dt * (list === scorches ? BURN_RECOVERY : 1);
@@ -449,6 +463,94 @@ window.PongModern = (api) => {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // RogueLike: cada piso y cada jefe tiene su propia paleta rival (forma, no solo color)
+  function drawEnemyPaddle(p, info, flash) {
+    const rect = api.rect;
+    const h = Math.round(p.h), x = p.x, y = p.y, w = PADDLE_W;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 4);
+    ctx.fillStyle = groundShadow();
+    rect(x + 2, y + 2, w, h);
+    if (info.elite || info.boss) {
+      const rage = info.boss && info.boss.rage;
+      ctx.fillStyle = rage ? `rgba(255, 70, 40, ${0.25 + 0.25 * pulse})` : `rgba(255, 210, 63, ${0.15 + 0.15 * pulse})`;
+      rect(x - 2, y - 2, w + 4, h + 4);
+    }
+    const px = (dx, dy, pw, ph, color) => {
+      ctx.fillStyle = color;
+      rect(x + dx, y + dy, pw, ph);
+    };
+    switch (info.look) {
+      case 'grass': // tablón de madera con clavos y musgo
+        px(0, 0, w, h, '#7a4a22');
+        px(0, 0, 1, h, '#a0662f');
+        px(w - 1, 0, 1, h, '#5a3416');
+        for (let j = 4; j < h - 1; j += 6) px(1, j, 2, 1, '#5a3416');
+        px(1, 1, 1, 1, '#c8d0d8');
+        px(2, h - 2, 1, 1, '#c8d0d8');
+        px(-1, 0, 2, 2, '#4caf3a');
+        px(-1, Math.floor(h / 2), 1, 2, '#6cc24a');
+        px(w - 1, h - 2, 2, 2, '#4caf3a');
+        break;
+      case 'ice': // cristal facetado con púas
+        px(0, 0, w, h, '#5fb8e8');
+        for (let j = 0; j < h - 1; j += 4) px(j % 8 ? 2 : 0, j, 2, 2, '#c8f0ff');
+        for (let j = 2; j < h - 1; j += 5) px(-1, j, 1, 2, '#e6f8ff');
+        px(1, -1, 2, 1, '#e6f8ff');
+        px(1, h, 2, 1, '#e6f8ff');
+        break;
+      case 'lava': { // obsidiana con una grieta de magma que late
+        px(0, 0, w, h, '#1c1412');
+        px(0, 0, 1, h, '#3d2b25');
+        const hot = pulse > 0.6 ? LAVA.hot : LAVA.core;
+        for (let j = 1; j < h - 1; j++) px(1 + (Math.floor(j / 3) % 2), j, 1, 1, hot);
+        for (let j = 3; j < h - 2; j += 6) px(-1, j, 1, 2, '#2b1f1c');
+        break;
+      }
+      case 'wall': // EL MURO: ladrillos con argamasa, más ancho que su paleta
+        px(-1, 0, w + 2, h, '#8a8070');
+        for (let j = 0, row = 0; j < h; j += 3, row++) {
+          const color = row % 2 ? '#a02a22' : '#b8322a';
+          const bh = Math.min(2, h - j);
+          if (row % 2) {
+            px(-1, j, 1, bh, color);
+            px(1, j, 4, bh, color);
+          } else {
+            px(-1, j, 3, bh, color);
+            px(3, j, 2, bh, color);
+          }
+        }
+        break;
+      case 'iceking': // REY DE HIELO: cristal con corona en los extremos y un ojo que brilla
+        px(0, 0, w, h, '#3a8fd0');
+        for (let j = 1; j < h - 1; j += 3) px(j % 6 ? 2 : 0, j, 2, 2, '#c8f0ff');
+        for (const [dy, dir] of [[0, -1], [h, 1]]) {
+          px(-1, dy + (dir < 0 ? -2 : 0), 1, 2, '#e6f8ff');
+          px(1, dy + (dir < 0 ? -3 : 0), 2, 3, '#ffffff');
+          px(4, dy + (dir < 0 ? -2 : 0), 1, 2, '#e6f8ff');
+        }
+        px(1, Math.floor(h / 2) - 1, 2, 2, pulse > 0.5 ? '#ffffff' : '#1d5fa8');
+        break;
+      case 'dragon': { // DRAGÓN: escamas, vientre dorado, cuernos y ojos
+        px(0, 0, w, h, '#7a1a14');
+        for (let j = 0; j < h; j += 3) px(Math.floor(j / 3) % 2, j, 2, 1, '#b8322a');
+        px(w - 1, 2, 1, h - 4, '#e8b83a');
+        px(-1, -2, 1, 2, '#e8dcc0');
+        px(-2, -3, 1, 1, '#e8dcc0');
+        px(-1, h, 1, 2, '#e8dcc0');
+        px(-2, h + 2, 1, 1, '#e8dcc0');
+        const eye = info.boss && info.boss.rage ? '#ff3a2a' : '#ffd23f';
+        px(0, Math.floor(h / 2) - 3, 1, 1, eye);
+        px(0, Math.floor(h / 2) + 2, 1, 1, eye);
+        break;
+      }
+    }
+    if (p.frozen > 0) {
+      px(0, 0, w, h, 'rgba(159, 230, 255, 0.55)');
+      for (let j = 3; j < h - 2; j += 5) px(1 + (j % 2), j, 1, 1, '#ffffff');
+    }
+    if (flash > 0) px(0, 0, w, h, 'rgba(255, 255, 255, 0.7)');
   }
 
   function drawField() {
@@ -592,48 +694,78 @@ window.PongModern = (api) => {
     rect(W - 3, 3, 2, H - 6);
   }
 
-  // Reloj de Supervivencia: blanco, rojo y parpadeando en los últimos 10 s, azul con escarcha si está congelado
-  function drawClock(box) {
-    const { time: t, frozen } = api.survival;
-    const secs = Math.ceil(t);
-    const w = api.numberWidth(secs, box.s);
-    let color = '#ffffff';
-    if (frozen > 0) color = '#9fe6ff';
-    else if (t <= 10) color = Math.floor(time * 4) % 2 ? '#ff5a4f' : '#ffb3ad';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    api.drawNumber(secs, box.x + 1, box.y + 1, box.s);
-    ctx.fillStyle = color;
-    api.drawNumber(secs, box.x, box.y, box.s);
-    // Icono de reloj a la izquierda
-    const ix = box.x - 9, iy = box.y + 3;
-    ctx.fillRect(ix + 1, iy, 4, 1);
-    ctx.fillRect(ix, iy + 1, 1, 4);
-    ctx.fillRect(ix + 5, iy + 1, 1, 4);
-    ctx.fillRect(ix + 1, iy + 5, 4, 1);
-    ctx.fillRect(ix + 3, iy + 2, 1, 2);
-    if (frozen > 0) {
-      ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < 4; i++) ctx.fillRect(box.x + ((i * 7 + Math.floor(time * 3)) % (w + 1)), box.y + (i * 5) % (5 * box.s), 1, 1);
-    }
-  }
-
   // Corazón de 7x6 píxeles
   const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
+  const HEART_FX_TIME = 0.6;
 
-  function drawHeart(x, y, full) {
-    ctx.fillStyle = full ? '#ff4d5e' : 'rgba(60, 20, 28, 0.75)';
+  function drawHeart(x, y, full, color = null) {
+    ctx.fillStyle = color || (full ? '#ff4d5e' : 'rgba(60, 20, 28, 0.75)');
     HEART.forEach((row, j) => {
       for (let i = 0; i < 7; i++) if (row[i] === '1') ctx.fillRect(x + i, y + j, 1, 1);
     });
-    if (full) {
+    if (full && !color) {
       ctx.fillStyle = '#ffd6dc';
       ctx.fillRect(x + 1, y + 1, 1, 1);
     }
   }
 
+  // Corazón perdido: estalla en pedazos; si fue un gol de fuego, arde y se deshace en brasas y humo
+  function heartLost(index, fire) {
+    heartFx.push({ index, fire, t: 0, burst: false });
+  }
+
+  function drawHeartFx(fx, x, y) {
+    const k = fx.t / HEART_FX_TIME;
+    if (fx.fire) {
+      // Parpadea entre amarillo, naranja y rojo mientras se consume
+      const colors = ['#fff3b0', '#ffb42e', '#ff5a1f', '#a8261f'];
+      if (k < 0.8) drawHeart(x + Math.round(rand(-1, 1)), y, true, colors[Math.floor(time * 20) % 3 + (k > 0.5 ? 1 : 0)]);
+      if (Math.random() < 0.7) {
+        hudBits.push({ x: x + rand(0, 7), y: y + rand(0, 4), vx: rand(-8, 8), vy: rand(-45, -20), g: -10,
+          life: rand(0.3, 0.6), max: 0.6, color: pick(['#ffd23f', '#ff7a1f', '#ff5a1f']) });
+      }
+      if (!fx.burst && k > 0.75) {
+        fx.burst = true;
+        for (let i = 0; i < 12; i++) {
+          hudBits.push({ x: x + rand(0, 7), y: y + rand(0, 6), vx: rand(-10, 10), vy: rand(-30, -8), g: -6,
+            life: rand(0.6, 1.1), max: 1.1, color: 'rgba(70, 60, 55, 0.8)' });
+        }
+      }
+    } else {
+      // Destello blanco que crece y luego estalla en trozos rojos que caen
+      if (k < 0.3) {
+        const grow = Math.round(k * 6);
+        drawHeart(x - grow / 2, y - grow / 2, true, '#ffffff');
+      }
+      if (!fx.burst && k >= 0.3) {
+        fx.burst = true;
+        for (let i = 0; i < 18; i++) {
+          const a = rand(0, Math.PI * 2), sp = rand(25, 70);
+          hudBits.push({ x: x + 3, y: y + 3, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 20, g: 140,
+            life: rand(0.5, 0.9), max: 0.9, color: pick(['#ff4d5e', '#ffb3bc', '#a8263a', '#ffffff']) });
+        }
+      }
+    }
+  }
+
   // RogueLike: corazones, goles de la sala (pips) y barra de vida del jefe
   function drawRogueHud(boxes, info) {
-    for (let i = 0; i < info.maxHearts; i++) drawHeart(boxes.hearts.x + i * 8, boxes.hearts.y, i < info.hearts);
+    for (let i = 0; i < info.maxHearts; i++) {
+      const fx = heartFx.find((f) => f.index === i);
+      const x = boxes.hearts.x + i * 8, y = boxes.hearts.y;
+      if (fx) {
+        drawHeart(x, y, false);
+        drawHeartFx(fx, x, y);
+      } else {
+        drawHeart(x, y, i < info.hearts);
+      }
+    }
+    for (const b of hudBits) {
+      ctx.globalAlpha = Math.min(1, b.life / b.max * 1.5);
+      ctx.fillStyle = b.color;
+      ctx.fillRect(Math.round(b.x), Math.round(b.y), 1, 1);
+    }
+    ctx.globalAlpha = 1;
 
     for (let i = 0; i < info.target; i++) {
       const x = boxes.pips.x + i * 6, y = boxes.pips.y;
@@ -753,11 +885,12 @@ window.PongModern = (api) => {
       ctx.fillStyle = colors[1];
       api.drawNumber(p.score, b.x, b.y, b.s);
     }
-    if (api.survival) drawClock(boxes.timer);
-    if (api.rogue) drawRogueHud(boxes, api.rogue);
+    const rogue = api.rogue;
+    if (rogue) drawRogueHud(boxes, rogue);
 
     drawPaddle(left, C.p1, paddleFlash.left);
-    drawPaddle(right, C.p2, paddleFlash.right);
+    if (rogue && rogue.look) drawEnemyPaddle(right, rogue, paddleFlash.right);
+    else drawPaddle(right, C.p2, paddleFlash.right);
 
     const trailColor = onIce ? RINK.trail : (theme === 'lava' ? LAVA.trail : C.trail);
     for (let i = 0; i < trail.length; i++) {
@@ -810,7 +943,7 @@ window.PongModern = (api) => {
   }
 
   return {
-    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce, celebrate, setTheme,
+    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce, celebrate, setTheme, heartLost,
     shake: addShake,
     get iceActive() { return ice.on; },
   };

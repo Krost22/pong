@@ -222,6 +222,22 @@ window.PongAudio = (() => {
       noise({ dur: 1.2, vol: 0.3, filter: 'bandpass', f0: 300, f1: 120, q: 1.5, attack: 0.1 });
       tone({ type: 'sawtooth', f0: 70, f1: 45, dur: 1.2, vol: 0.12, attack: 0.1 });
     }),
+    // KrostNoid: combo, explosión, nave enemiga, bomba que cae y paleta aturdida
+    combo: sound(() => {
+      [76, 81, 88].forEach((n, i) => tone({ type: 'square', f0: note(n), dur: 0.09, vol: 0.06, at: i * 0.05 }));
+    }),
+    boom: sound(() => {
+      tone({ type: 'sine', f0: 120, f1: 35, dur: 0.45, vol: 0.4 });
+      noise({ dur: 0.4, vol: 0.25, filter: 'lowpass', f0: 1800, f1: 150 });
+    }),
+    ufo: sound(() => {
+      for (let i = 0; i < 4; i++) tone({ type: 'sine', f0: 600, f1: 900, dur: 0.12, vol: 0.06, at: i * 0.12 });
+    }),
+    bombDrop: sound(() => tone({ type: 'square', f0: 900, f1: 300, dur: 0.25, vol: 0.04 })),
+    stun: sound(() => {
+      noise({ dur: 0.25, vol: 0.2, filter: 'bandpass', f0: 1500, f1: 400, q: 2 });
+      tone({ type: 'square', f0: 200, f1: 120, dur: 0.3, vol: 0.08 });
+    }),
     // Pequeña fanfarria
     win: sound(() => {
       const melody = [[67, 0, 0.15], [72, 0.15, 0.15], [76, 0.3, 0.15], [79, 0.45, 0.3], [76, 0.78, 0.15], [79, 0.93, 0.6]];

@@ -58,9 +58,9 @@ window.PongRoguelike = (api) => {
   };
   const ELITE_TRAITS = ['ghosts', 'freeze', 'shield', 'fire'];
   const BOSSES = {
-    1: { name: 'EL MURO', size: 2, speed: 0.8, reaction: 1, error: 0.9, hp: 5, traits: ['wall'] },
-    2: { name: 'REY DE HIELO', size: 1.3, speed: 1.05, reaction: 0.9, error: 0.9, hp: 6, traits: ['freeze', 'ghosts'] },
-    3: { name: 'DRAGÓN', size: 1.3, speed: 1.1, reaction: 0.9, error: 0.85, hp: 7, traits: ['fire', 'fireGhosts'], rageTraits: ['balloons'] },
+    1: { name: 'EL MURO', look: 'wall', size: 2, speed: 0.8, reaction: 1, error: 0.9, hp: 5, traits: ['wall'] },
+    2: { name: 'REY DE HIELO', look: 'iceking', size: 1.3, speed: 1.05, reaction: 0.9, error: 0.9, hp: 6, traits: ['freeze', 'ghosts'] },
+    3: { name: 'DRAGÓN', look: 'dragon', size: 1.3, speed: 1.1, reaction: 0.9, error: 0.85, hp: 7, traits: ['fire', 'fireGhosts'], rageTraits: ['balloons'] },
   };
 
   // Comportamientos periódicos del rival. run() devuelve false si no era buen momento (se reintenta pronto).
@@ -227,13 +227,20 @@ window.PongRoguelike = (api) => {
   }
 
   // --- HUD ---
-  function hudText() {
-    if (!run) return '';
-    return `PISO ${run.floor}-${run.room + 1} · ${enemy ? enemy.name : 'MAPA'} · MONEDAS ${run.coins}`;
+  // Datos para el HUD de texto (game.js lo pinta como insignias: piso, rival y monedas)
+  function hudData() {
+    if (!run) return null;
+    const floor = Math.min(run.floor, FLOORS); // tras ganar, run.floor pasa a 4
+    return {
+      floor, room: run.room, rooms: ROOMS_PER_FLOOR, theme: FLOOR_INFO[floor].theme,
+      floorName: FLOOR_INFO[floor].name, enemy: enemy ? enemy.name : null, boss: !!(enemy && enemy.boss),
+      coins: run.coins,
+    };
   }
 
-  const updateHud = () => api.setHud(hudText());
+  const updateHud = () => api.setHud(hudData());
 
+  // Datos para el HUD dibujado en la cancha (corazones, objetivo, jefe y diseño del rival)
   function hudInfo() {
     if (!run) return null;
     return {
@@ -241,11 +248,27 @@ window.PongRoguelike = (api) => {
       maxHearts: run.maxHearts,
       target: enemy ? target : 0,
       goals: left.score,
+      // Diseño de la paleta rival: el del jefe o el del piso (madera, cristal u obsidiana)
+      look: enemy ? enemy.look || FLOOR_INFO[Math.min(run.floor, FLOORS)].theme : null,
+      elite: roomKind === 'elite',
       boss: enemy && enemy.boss ? { left: Math.max(0, target - left.score), max: target, rage: enemy.rage } : null,
     };
   }
 
-  const stats = () => `♥ ${run.hearts}/${run.maxHearts} · MONEDAS ${run.coins}`;
+  // Línea de estado de las pantallas entre salas: corazones y monedas como insignias
+  function stats(prefix = '') {
+    const el = $('rogue-sub');
+    el.textContent = prefix;
+    const hearts = document.createElement('span');
+    hearts.className = 'pill hearts';
+    hearts.textContent = `♥ ${run.hearts}/${run.maxHearts}`;
+    const coins = document.createElement('span');
+    coins.className = 'pill coins';
+    const icon = document.createElement('i');
+    icon.className = 'coin';
+    coins.append(icon, String(run.coins));
+    el.append(hearts, coins);
+  }
 
   function ownedText() {
     const owned = UPGRADES.filter((u) => has(u.id)).map((u) => u.name + (stack(u.id) > 1 ? ` x${stack(u.id)}` : ''));
@@ -335,9 +358,9 @@ window.PongRoguelike = (api) => {
     return button(`card ${u.rarity}`, parts, onPick, sold || (price !== null && run.coins < price));
   }
 
-  function render({ title, sub = null, map = false, items = [], note = '', actions = [] }) {
+  function render({ title, sub = '', map = false, items = [], note = '', actions = [] }) {
     $('rogue-title').textContent = title;
-    $('rogue-sub').textContent = sub || stats();
+    stats(sub);
     const mapEl = $('rogue-map');
     mapEl.innerHTML = '';
     mapEl.classList.toggle('hidden', !map);
@@ -401,7 +424,7 @@ window.PongRoguelike = (api) => {
     const offers = offerCards(3, kind === 'boss' ? 'legendary' : (kind === 'elite' ? 'rare' : null));
     render({
       title: kind === 'boss' ? '¡JEFE DERROTADO!' : '¡SALA SUPERADA!',
-      sub: `ELIGE UNA MEJORA · ${stats()}`,
+      sub: 'ELIGE UNA MEJORA ',
       items: offers.map((u) => cardButton(u, () => { take(u); advance(); })),
       note: ownedText(),
       actions: [{ label: `SALTAR (+${COINS.skip} MONEDAS)`, fn: () => { gainCoins(COINS.skip); advance(); } }],
@@ -458,7 +481,7 @@ window.PongRoguelike = (api) => {
     const offers = offerCards(2, null, RARITY_WEIGHTS.reward, 'common');
     render({
       title: 'ENTRENAR',
-      sub: `ELIGE UNA · ${stats()}`,
+      sub: 'ELIGE UNA ',
       items: offers.map((u) => cardButton(u, () => { take(u); advance(); })),
       note: ownedText(),
       actions: [{ label: 'VOLVER', fn: showRest }],
@@ -548,6 +571,7 @@ window.PongRoguelike = (api) => {
 
     // Gol en contra: cuesta un corazón
     run.hearts--;
+    api.fx().heartLost(Math.max(0, run.hearts), fiery); // el corazón estalla (o arde si fue gol de fuego)
     sfx().heartLost();
     api.fx().shake(0.3);
     if (run.hearts <= 0) {
@@ -653,7 +677,7 @@ window.PongRoguelike = (api) => {
 
   return {
     startRun, continueRun, saveInfo, onGoal, onPlayerHit, adjustHitSpeed, adjustAngle, serveMult,
-    update, key, difficulty, fireSpeed, giftRate, hudInfo, hudText,
+    update, key, difficulty, fireSpeed, giftRate, hudInfo, hudData,
     hasSave: () => !!load(),
     get ai() {
       return enemy ? { speed: enemy.speed * (enemy.rage ? RAGE_SPEED : 1), reaction: enemy.reaction, error: enemy.error } : null;

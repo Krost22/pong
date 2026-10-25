@@ -99,9 +99,8 @@ button.corner {
   transform: translateY(-50%);
 }
 
-/* En Supervivencia y RogueLike (horizontal) el centro lo ocupa el marcador y en KrostNoid los ladrillos: pausa arriba a la derecha */
+/* En el RogueLike (horizontal) el centro lo ocupa el marcador y en KrostNoid los ladrillos: pausa arriba a la derecha */
 #screen.knoid button.corner,
-#screen.survival:not(.portrait) button.corner,
 #screen.rogue:not(.portrait) button.corner {
   top: 6px;
   left: auto;
@@ -290,6 +289,80 @@ h2 {
   background: #1f4d1d;
   border-color: #ffd23f;
   color: #ffd23f;
+}
+
+/* --- RogueLike: HUD con insignias (piso, rival, monedas) --- */
+#hud.rogue-hud {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  opacity: 1;
+  max-width: calc(100% - 70px);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: clamp(9px, 1.5vmax, 13px);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.pill.floor.grass { border-color: #7ee05a; background: rgba(30, 80, 25, 0.8); }
+.pill.floor.ice { border-color: #9fe6ff; background: rgba(30, 70, 100, 0.8); }
+.pill.floor.lava { border-color: #ff7a1f; background: rgba(90, 30, 15, 0.85); }
+.pill.enemy.boss { border-color: #ff5a4f; color: #ffb3ad; }
+.pill.hearts { border-color: #ff4d5e; color: #ffb3bc; }
+.pill.coins { border-color: #ffd23f; color: #ffd23f; }
+
+/* Moneda pixelada: círculo dorado con borde oscuro y brillo */
+i.coin {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0 0 18%, #ffd23f 20% 60%, #c99a12 62%);
+  box-shadow: 0 0 0 1px #6b4e08;
+}
+
+.pill.coins.bump {
+  animation: coin-bump 0.35s ease-out;
+}
+
+@keyframes coin-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); box-shadow: 0 0 10px #ffd23f; }
+  100% { transform: scale(1); }
+}
+
+.pill .dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.pill .dot.done { background: #fff; }
+.pill .dot.current { background: #ffd23f; border-color: #ffd23f; }
+.pill .dot.boss { border-color: #ff5a4f; }
+
+#rogue-sub {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 /* --- RogueLike: mapa, puertas y cartas --- */

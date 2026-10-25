@@ -14,9 +14,8 @@
   const LEVEL_STEP = 0.10, GOALS_PER_LEVEL = 3; // +10% de dificultad cada 3 goles
   const SERVE_DELAY = 1;
   const MAX_STEP = 1 / 240; // subpasos para que la pelota no atraviese las paletas
-  const SURVIVAL_START = 60, SURVIVAL_BONUS = 5; // segundos iniciales y por cada gol de J1
   const BOARD_SIZE = 5;
-  const BOARD_KEYS = { survival: 'pong.survival.board', krostnoid: 'pong.krostnoid.board', roguelike: 'pong.roguelike.board' };
+  const BOARD_KEYS = { krostnoid: 'pong.krostnoid.board', roguelike: 'pong.roguelike.board' };
   const ROGUE_SHIELD = 15; // segundos de escudo con la carta "Escudo de inicio"
 
   // Dígitos de 3x5 píxeles, estilo marcador clásico
@@ -41,13 +40,11 @@
   const keys = new Map(); // tecla pulsada -> orden de pulsación
   const touch = { left: null, right: null, knoid: null };
   const pointers = new Map(); // pointerId -> 'left' | 'right' | 'knoid'
-  // Supervivencia: tiempo restante, segundos de reloj congelado y récord al empezar la partida
-  const survival = { time: SURVIVAL_START, frozen: 0, record: 0, beaten: false };
   let pressSeq = 0;
 
   let H = MAX_H;
   let portrait = false;
-  let game = 'pong';     // pong | survival | krostnoid | roguelike
+  let game = 'pong';     // pong | krostnoid | roguelike
   let mode = 'com';      // com | 2p (solo Pong)
   let style = 'classic'; // classic | modern (solo Pong)
   let state = 'serve';   // serve | play | paused | over | between (RogueLike: mapa, cartas, tienda...)
@@ -59,18 +56,17 @@
   let muted = false;
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const isSurvival = () => game === 'survival';
   const isKnoid = () => game === 'krostnoid';
   const isRogue = () => game === 'roguelike';
   const inRun = () => isRogue() && !demo; // partida real de RogueLike (no la demo del menú)
-  const vsCom = () => isSurvival() || isRogue() || mode === 'com';
+  const vsCom = () => isRogue() || mode === 'com';
   function difficulty() {
     if (demo) return 1;
     if (isRogue()) return rogue.difficulty();
     return vsCom() ? Math.pow(1 + LEVEL_STEP, level) : 1;
   }
-  // Supervivencia y RogueLike usan el motor del Pong moderno
-  const modernOn = () => isSurvival() || isRogue() || style === 'modern';
+  // El RogueLike usa el motor del Pong moderno
+  const modernOn = () => isRogue() || style === 'modern';
   const sideOf = (p) => (p === left ? 'left' : 'right');
   // La demo del menú juega sin sonido
   const SILENT = new Proxy({}, { get: () => () => {} });
@@ -158,10 +154,6 @@
     hideMsg();
     modern.reset();
     if (isRogue()) modern.setTheme('lava', true); // la demo del RogueLike se juega en el volcán
-    survival.time = SURVIVAL_START;
-    survival.frozen = 0;
-    survival.record = isSurvival() ? bestScore(BOARD_KEYS.survival) : 0;
-    survival.beaten = false;
     if (isKnoid()) {
       knoid.start(demo);
       state = 'play';
@@ -269,21 +261,17 @@
       rogueGoal(side, fiery);
       return;
     }
-    if (isSurvival()) {
-      survivalGoal(scorer);
-    } else {
-      if (scorer.score >= WIN_SCORE) {
-        if (demo) {
-          left.score = right.score = 0; // la demo vuelve a empezar sin pantalla final
-        } else {
-          endGame(scorer);
-          return;
-        }
+    if (scorer.score >= WIN_SCORE) {
+      if (demo) {
+        left.score = right.score = 0; // la demo vuelve a empezar sin pantalla final
+      } else {
+        endGame(scorer);
+        return;
       }
-      if (modernOn()) {
-        showMsg('¡GOL!', 0.8);
-        powerups.checkComeback();
-      }
+    }
+    if (modernOn()) {
+      showMsg('¡GOL!', 0.8);
+      powerups.checkComeback();
     }
     if (vsCom() && !demo) {
       const newLevel = Math.floor((left.score + right.score) / GOALS_PER_LEVEL);
@@ -316,22 +304,6 @@
     startServe();
   }
 
-  // Supervivencia: cada gol de J1 suma tiempo; superar el récord se celebra en el momento
-  function survivalGoal(scorer) {
-    if (scorer !== left) {
-      showMsg('¡GOL DE COM!', 0.8);
-      return;
-    }
-    survival.time += SURVIVAL_BONUS;
-    showMsg(`¡GOL! +${SURVIVAL_BONUS} s`, 1);
-    if (!demo && !survival.beaten && survival.record > 0 && left.score > survival.record) {
-      survival.beaten = true;
-      showMsg('¡NUEVO RÉCORD!', 1.8);
-      modern.celebrate('left');
-      sfx().record();
-    }
-  }
-
   function endGame(winner) {
     state = 'over';
     centerBall();
@@ -344,20 +316,6 @@
     if (modernOn()) modern.onWin(sideOf(winner));
   }
 
-  function survivalOver() {
-    state = 'over';
-    survival.time = 0;
-    centerBall();
-    hideMsg();
-    const result = saveScore(BOARD_KEYS.survival, left.score);
-    showResults({ title: '¡SE ACABÓ EL TIEMPO!', final: `${left.score} PUNTOS`, result });
-    if (result.isRecord) {
-      modern.celebrate('left');
-      sfx().record();
-    } else {
-      sfx().gameOver();
-    }
-  }
 
   function knoidOver(score, reached) {
     state = 'over';
@@ -396,14 +354,6 @@
     if (modernOn() && state !== 'paused') modern.update(dt);
     if (inRun() && state !== 'paused') rogue.update(dt); // rasgos del rival y pantallas con retardo
     if (state !== 'serve' && state !== 'play') return;
-
-    if (isSurvival() && !demo) {
-      if (survival.frozen > 0) survival.frozen = Math.max(0, survival.frozen - dt);
-      else if ((survival.time -= dt) <= 0) {
-        survivalOver();
-        return;
-      }
-    }
 
     movePaddles(dt);
     if (modernOn()) powerups.update(dt);
@@ -529,13 +479,6 @@
     else if (ball.x > W) goal(left);
   }
 
-  // Power-up Congelado: en Supervivencia, si lo consigue J1 también se detiene el reloj
-  function onFreeze(owner, seconds) {
-    if (!isSurvival() || owner !== 'left') return;
-    survival.frozen = seconds;
-    showMsg('¡TIEMPO CONGELADO!', 1.4);
-  }
-
   // --- Dibujo ---
   const snap = (v) => Math.round(v * SCALE) / SCALE;
 
@@ -574,26 +517,18 @@
     const s = 4;
     if (inRun()) {
       const pipsW = Math.max(0, rogue.hudInfo().target * 6 - 2);
+      // En vertical todo va junto al marcador, a un lado de la línea central: así nada tapa
+      // las zonas de las paletas (la del rival está arriba del todo y la tuya abajo)
       if (portrait) {
         return {
           left: { x: 14, y: W / 2 - 6 - 5 * s, s }, right: null,
-          pips: { x: 14, y: W / 2 + 6 }, hearts: { x: 6, y: W - 10 }, boss: { x: 30, y: 12, w: H - 60 },
+          boss: { x: 14, y: W / 2 - 6 - 5 * s - 10, w: Math.min(70, H - 28) },
+          pips: { x: 14, y: W / 2 + 6 }, hearts: { x: 14, y: W / 2 + 15 },
         };
       }
       return {
         left: { x: W / 2 - numberWidth(left.score, s) / 2, y: 10, s }, right: null,
         pips: { x: W / 2 - pipsW / 2, y: 34 }, hearts: { x: 22, y: H - 10 }, boss: { x: W / 2 + 28, y: 12, w: W / 2 - 56 },
-      };
-    }
-    if (isSurvival()) {
-      const secs = Math.ceil(survival.time);
-      if (portrait) {
-        return { left: { x: 14, y: W / 2 - 6 - 5 * s, s }, right: null, timer: { x: 14, y: W / 2 + 6, s: 3 } };
-      }
-      return {
-        left: { x: W / 2 - numberWidth(left.score, s) / 2, y: 10, s },
-        right: null,
-        timer: { x: W / 2 - numberWidth(secs, 3) / 2, y: 36, s: 3 },
       };
     }
     if (portrait) {
@@ -640,14 +575,13 @@
     fx: () => modern,
     sfx: () => sfx(),
     giftRate: () => (inRun() ? rogue.giftRate() : 1),
-    rect, toScreenRect, playerName, showMsg, onFreeze,
+    rect, toScreenRect, playerName, showMsg,
   });
 
   const modern = window.PongModern({
     ctx, W, PADDLE_W, BALL_SIZE, BALL_MAX_SPEED, left, right, ball, powerups,
     get H() { return H; },
     get state() { return state; },
-    get survival() { return isSurvival() ? survival : null; },
     get rogue() { return inRun() ? rogue.hudInfo() : null; },
     fireSpeed: () => (inRun() ? rogue.fireSpeed() : null),
     sfx: () => sfx(),
@@ -659,7 +593,7 @@
     sfx: () => sfx(),
     touchX: () => touch.knoid,
     record: () => bestScore(BOARD_KEYS.krostnoid),
-    setHud: (text) => { $('hud').textContent = text; },
+    setHud: setHudText,
     onGameOver: knoidOver,
   });
 
@@ -669,7 +603,7 @@
     fx: () => modern,
     sfx: () => sfx(),
     showMsg, toMenu,
-    setHud: (text) => { $('hud').textContent = text; },
+    setHud: renderRogueHud,
     prepare: prepareRogue,
     beginRoom: beginRogueRoom,
     endRun: endRogueRun,
@@ -687,7 +621,6 @@
     $('btn-new').classList.toggle('hidden', isRogue());
     $('quit-msg').classList.add('hidden');
     screenEl.classList.toggle('modern', game !== 'pong' || style === 'modern');
-    screenEl.classList.toggle('survival', isSurvival());
     screenEl.classList.toggle('knoid', isKnoid());
     screenEl.classList.toggle('rogue', isRogue());
   }
@@ -719,14 +652,48 @@
   function updateHud() {
     if (isKnoid()) return; // KrostNoid escribe su propio marcador
     if (inRun()) {
-      $('hud').textContent = rogue.hudText();
-    } else if (isSurvival()) {
-      $('hud').textContent = `SUPERVIVENCIA · NIVEL ${level + 1} · RÉCORD ${Math.max(survival.record, left.score)}`;
+      renderRogueHud(rogue.hudData());
     } else {
-      $('hud').textContent = mode === 'com'
+      setHudText(mode === 'com'
         ? `COM · NIVEL ${level + 1} · ${Math.round(difficulty() * 100)}%`
-        : `2 JUGADORES · A ${WIN_SCORE}`;
+        : `2 JUGADORES · A ${WIN_SCORE}`);
     }
+  }
+
+  function setHudText(text) {
+    const hud = $('hud');
+    hud.className = hud.className.includes('hidden') ? 'hidden' : '';
+    hud.textContent = text;
+  }
+
+  // HUD del RogueLike: insignia del piso (color del piso + salas), rival y monedas con icono
+  let hudCoins = null;
+  function renderRogueHud(data) {
+    const hud = $('hud');
+    if (!data) return;
+    hud.classList.add('rogue-hud');
+    hud.textContent = '';
+    const span = (cls, text = '') => {
+      const s = document.createElement('span');
+      s.className = cls;
+      s.textContent = text;
+      return s;
+    };
+    const floor = span(`pill floor ${data.theme}`, `PISO ${data.floor} · ${data.floorName}`);
+    const dots = span('dots');
+    for (let i = 0; i < data.rooms; i++) {
+      dots.appendChild(span('dot' + (i < data.room ? ' done' : '') + (i === data.room ? ' current' : '') + (i === data.rooms - 1 ? ' boss' : '')));
+    }
+    floor.appendChild(dots);
+    hud.appendChild(floor);
+    if (data.enemy) hud.appendChild(span(`pill enemy${data.boss ? ' boss' : ''}`, data.enemy));
+    const coins = span('pill coins');
+    const icon = document.createElement('i');
+    icon.className = 'coin';
+    coins.append(icon, String(data.coins));
+    if (hudCoins !== null && data.coins > hudCoins) coins.classList.add('bump'); // rebote al ganar monedas
+    hudCoins = data.coins;
+    hud.appendChild(coins);
   }
 
   // Menú: filas visibles y texto de ayuda según el juego elegido
@@ -736,9 +703,7 @@
     $('row-style').classList.toggle('hidden', game !== 'pong');
     const info = $('game-info');
     const saved = isRogue() ? rogue.saveInfo() : null;
-    if (isSurvival()) {
-      info.textContent = `${SURVIVAL_START} s · cada gol +${SURVIVAL_BONUS} s · RÉCORD: ${bestScore(BOARD_KEYS.survival)}`;
-    } else if (isKnoid()) {
+    if (isKnoid()) {
       info.textContent = `Rompe todos los ladrillos · RÉCORD: ${bestScore(BOARD_KEYS.krostnoid)}`;
     } else if (isRogue()) {
       info.textContent = saved || `3 pisos · jefes · mejoras · RÉCORD: ${bestScore(BOARD_KEYS.roguelike)}`;
@@ -939,7 +904,7 @@
 
   // Solo para pruebas automáticas: index.html?debug expone el estado interno
   if (/[?&]debug\b/.test(location.search)) {
-    window.__pong = { ball, left, right, survival, powerups, knoid, rogue, modern, touch, get state() { return state; } };
+    window.__pong = { ball, left, right, powerups, knoid, rogue, modern, touch, get state() { return state; } };
   }
 
   layout();

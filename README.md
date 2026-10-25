@@ -31,30 +31,28 @@ En la línea central aparecen regalos al azar. El poder se lo lleva quien lanzó
 | Mini rival | La paleta del rival mide la mitad durante 8 s. |
 | Congelado | El rival no puede moverse durante 2 s y la cancha se vuelve de hielo durante 2 goles. |
 
-## Supervivencia
-
-Juegas tú (J1) contra la COM, con todo lo del modo moderno.
-
-- Empiezas con 60 segundos de reloj y cada gol tuyo suma 5 segundos más.
-- Un único marcador en el centro cuenta tus goles.
-- Si consigues el poder Congelado, el reloj también se detiene durante 2 segundos. Si lo consigue la COM, solo se congela tu paleta y el reloj sigue corriendo.
-- Cuando el reloj llega a 0 pierdes. La pantalla final muestra tus puntos, tu récord y la tabla de las 5 mejores partidas, que se guarda en el dispositivo.
-- Si superas tu récord, se celebra en el momento con confeti dorado y otra vez en la pantalla final.
-
 ## KrostNoid
 
-Rompeladrillos al estilo Arkanoid, con 5 niveles. Al terminar el quinto vuelven a empezar, más rápidos y con ladrillos de plata más duros.
+Rompeladrillos al estilo Arkanoid, rápido y lleno de eventos. Tiene 5 niveles; al terminar el quinto vuelven a empezar, más rápidos y con ladrillos de plata más duros.
 
-- **Ladrillos:** los de color se rompen de un golpe, los de **plata** necesitan dos y los de **oro** son indestructibles.
-- **Cápsulas:** algunos ladrillos sueltan una cápsula al romperse:
+- **Ladrillos:** los de color se rompen de un golpe, los de **plata** necesitan dos y los de **oro** son indestructibles. Al empezar un nivel, los ladrillos caen desde arriba.
+- **Bola:** se acelera un poco con cada rebote en la paleta.
+- **Combos:** romper ladrillos seguidos sin tocar la paleta multiplica los puntos (x2 desde 5, x3 desde 10...).
+- **Naves enemigas:** cruzan la pantalla de vez en cuando.
+  - El **OVNI** siempre suelta una cápsula al destruirlo.
+  - El **BOMBARDERO** lanza bombas que aturden tu paleta.
+  - Las destruyes con la bola o con el láser.
+- **Cápsulas:**
   - **E**xpandir: paleta más ancha.
   - **M**ultibola: tres bolas.
-  - **L**áser: dispara solo durante 10 s.
+  - **L**áser: dispara solo.
   - **S** (lento): la bola va más despacio.
   - **V**ida extra.
+  - **F**uego: la bola atraviesa los ladrillos.
+  - E**X**plosiva: rompe también los ladrillos de alrededor.
+  - **B**arrera: salva una bola.
 - **Controles:** arrastra el dedo o usa ← / → para mover la paleta. Toca la pantalla o pulsa Espacio para lanzar la bola.
-- Empiezas con 3 vidas. La tabla de récords se guarda aparte de la de Supervivencia.
-
+- Empiezas con 3 vidas y hay una tabla de récords.
 ## RogueLike (Rogue Pong)
 
 Una *run* de Pong moderno contra la COM, en 3 pisos de 4 salas: **Césped**, **Hielo** (pista de hockey) y **Volcán** (lava). Las 3 primeras salas de cada piso las eliges entre 2 puertas; la cuarta es siempre el **jefe**.
@@ -73,6 +71,8 @@ Una *run* de Pong moderno contra la COM, en 3 pisos de 4 salas: **Césped**, **H
   - Pirómano: la pelota arde casi siempre.
   - Acorazado: se pone un escudo.
 - **Jefes:** EL MURO, REY DE HIELO y DRAGÓN. Con la mitad de vida se enfurecen.
+- **Rivales:** cada piso tiene su propio diseño de paleta rival (madera, cristal de hielo u obsidiana) y cada jefe el suyo (muro de ladrillos, cristal con corona, dragón con escamas y cuernos).
+- **Corazones:** al perder uno, explota. Si fue un gol de fuego, arde y se deshace en brasas.
 - **Mejoras:** tras cada sala eliges 1 de 3 cartas (comunes, raras y legendarias) que se acumulan durante la run. Por ejemplo: Paleta larga, Golpe potente, Efecto, Vampiro, Espectro, Congelador, Segunda vida, Gol de oro, Freno, Titán…
 - **Monedas:** se ganan con goles y salas, y se gastan en la tienda (cartas o curación).
 - **Continuar:** la run se guarda en el dispositivo entre salas. Si sales al menú o cierras la app, CONTINUAR te devuelve al mapa.

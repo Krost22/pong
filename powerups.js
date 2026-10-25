@@ -129,7 +129,6 @@ window.PongPowerups = (api) => {
       case 'freeze':
         rival.frozen = FREEZE_TIME;
         api.fx().startIce();
-        api.onFreeze(owner, FREEZE_TIME);
         break;
       case 'balloons': spawnBalloons(); break;
     }
