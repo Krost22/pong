@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=block" rel="stylesheet">
+<style>
+  body { margin: 0; background: #000; overflow: hidden; }
+  #out { position: absolute; left: 0; top: 0; z-index: 2; }
+  #g { position: absolute; left: 0; top: 0; border: 0; z-index: 1; }
+</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<iframe id="g"></iframe>
+<script>
+// Imágenes de marketing: escenas reales del juego (iframe con requestAnimationFrame manual) + textos
+const q = new URLSearchParams(location.search);
+const OUT_W = +q.get('w'), OUT_H = +q.get('h');
+const FONT = '"Press Start 2P", "Courier New", monospace';
+const out = document.getElementById('out');
+out.width = OUT_W;
+out.height = OUT_H;
+const o = out.getContext('2d');
+const frameEl = document.getElementById('g');
+frameEl.style.width = q.get('gw') + 'px';
+frameEl.style.height = q.get('gh') + 'px';
+frameEl.src = '/game/index.html?debug';
+let W, D, P, gt = 0, cheat = null, forceGoal = 0;
+const $ = (id) => D.getElementById(id);
+const plain = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function step(n = 1) {
+  for (let i = 0; i < n; i++) {
+    if (cheat) cheat();
+    if (forceGoal > 0) { forceGoal--; P.right.y = P.ball.y > 90 ? 0 : 200; }
+    gt += 1000 / 60;
+    W.__raf(gt);
+  }
+}
+function toMenu() {
+  if (P.state === 'play' || P.state === 'serve') { $('btn-pause').click(); $('btn-exit').click(); }
+  else if (P.state === 'between') { [...$('rogue-actions').children].find((b) => /MENÚ/.test(b.textContent)).click(); }
+  else if (P.state === 'over') { $('btn-over-exit').click(); }
+}
+const pick = (sel) => D.querySelector(sel).click();
+function startPong(style) {
+  toMenu(); pick("[data-game='pong']"); pick(`[data-style='${style}']`); pick("[data-mode='com']"); $('btn-start').click();
+}
+const follow = () => { if (P.state === 'play' || P.state === 'serve') P.left.y = Math.max(0, P.ball.y - P.left.h / 2 + 3); };
+const knoidFollow = () => {
+  const b = P.knoid.balls.filter((x) => !x.stuck).sort((a, c) => c.y - a.y)[0];
+  P.touch.knoid = b ? b.x + 2 + Math.sin(gt / 600) * 8 : null;
+};
+function rogueRoom(patch, door) {
+  toMenu();
+  W.localStorage.setItem('pong.roguelike.save', JSON.stringify({ v: 1, run: Object.assign({
+    floor: 1, room: 0, hearts: 5, maxHearts: 6, coins: 42, stacks: {}, goals: 0, rooms: 0, bosses: 0, revived: false, vamp: 0, path: [],
+  }, patch) }));
+  pick("[data-game='pong']"); pick("[data-game='roguelike']");
+  $('btn-continue').click();
+  [...$('rogue-items').children].find((b) => b.classList.contains(door)).click();
+}
+
+// Copia del canvas del juego en ese instante
+function snap() {
+  const c = $('game');
+  const s = document.createElement('canvas');
+  s.width = c.width; s.height = c.height;
+  s.getContext('2d').drawImage(c, 0, 0);
+  return s;
+}
+function cover(img, x, y, w, h) {
+  const s = Math.max(w / img.width, h / img.height);
+  const dw = img.width * s, dh = img.height * s;
+  o.save();
+  o.beginPath(); o.rect(x, y, w, h); o.clip();
+  o.imageSmoothingEnabled = false;
+  o.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  o.restore();
+}
+function text(str, x, y, size, color, align = 'center', shadow = '#000') {
+  str = plain(str);
+  o.font = `${size}px ${FONT}`;
+  o.textAlign = align;
+  if (shadow) { o.fillStyle = shadow; o.fillText(str, x + Math.max(3, size / 10), y + Math.max(3, size / 10)); }
+  o.fillStyle = color;
+  o.fillText(str, x, y);
+}
+function logo(cx, cy, size) {
+  o.font = `${size}px ${FONT}`;
+  o.textAlign = 'center';
+  const off = size / 14;
+  o.fillStyle = '#000'; o.fillText('PONG', cx + off * 3, cy + off * 3);
+  o.fillStyle = '#1d5fa8'; o.fillText('PONG', cx + off * 2, cy + off * 2);
+  o.fillStyle = '#ff5a4f'; o.fillText('PONG', cx + off, cy + off);
+  o.fillStyle = '#ffd23f'; o.fillText('PONG', cx, cy);
+}
+function band(y, h, alpha = 0.72) {
+  const g = o.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, `rgba(0,0,0,0)`); g.addColorStop(0.3, `rgba(0,0,0,${alpha})`); g.addColorStop(0.7, `rgba(0,0,0,${alpha})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  o.fillStyle = g; o.fillRect(0, y, OUT_W, h);
+}
+function panel(y, h, color) {
+  o.fillStyle = 'rgba(5, 12, 24, 0.86)'; o.fillRect(0, y, OUT_W, h);
+  o.fillStyle = color; o.fillRect(0, y, OUT_W, 6); o.fillRect(0, y + h - 6, OUT_W, 6);
+}
+function tag(str, x, y, color) {
+  str = plain(str);
+  o.font = `22px ${FONT}`;
+  const w = o.measureText(str).width + 32;
+  o.fillStyle = 'rgba(0,0,0,0.75)'; o.fillRect(x, y, w, 46);
+  o.fillStyle = color; o.fillRect(x, y, 8, 46);
+  o.textAlign = 'left'; o.fillStyle = color; o.fillText(str, x + 20, y + 34);
+}
+function card(x, y, w, h, rarity, color, name, desc) {
+  o.fillStyle = 'rgba(8, 18, 28, 0.92)'; o.fillRect(x, y, w, h);
+  o.strokeStyle = color; o.lineWidth = 6; o.strokeRect(x + 3, y + 3, w - 6, h - 6);
+  o.shadowColor = color; o.shadowBlur = 24; o.strokeRect(x + 3, y + 3, w - 6, h - 6); o.shadowBlur = 0;
+  text(rarity, x + w / 2, y + 44, 16, color, 'center', null);
+  text(name, x + w / 2, y + 96, 24, '#ffffff');
+  desc.forEach((line, i) => text(line, x + w / 2, y + 146 + i * 30, 14, '#c8d0d8', 'center', null));
+}
+function footer(y) {
+  text('JUEGA GRATIS', OUT_W / 2, y, 34, '#7ee05a');
+  text('krost22.github.io/pong', OUT_W / 2, y + 56, 28, '#ffffff');
+  text('NAVEGADOR · ANDROID · KROSTGAMES 2026', OUT_W / 2, y + 100, 16, '#9fd4ff', 'center', null);
+}
+
+const IMAGES = {
+  // 1. Póster principal: los 4 modos en mosaico + logo
+  key() {
+    startPong('classic'); cheat = follow; step(260); const classic = snap();
+    startPong('modern'); cheat = follow; step(160);
+    P.powerups.gifts.push({ x: 152, y: 60, life: 12, t: 0, colors: ['#b07cff', '#6f45b8', '#7ee05a'] });
+    { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx *= 320 / s; P.ball.vy *= 320 / s; } step(20); const modern = snap();
+    rogueRoom({ floor: 3, room: 3, doors: ['boss'], hearts: 5 }, 'boss'); cheat = follow; step(120); P.left.score = 4; P.rogue.onGoal('left', false); step(140); const rogue = snap();
+    toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(200); P.knoid.spawnShip(); P.knoid.applyCapsule('F'); step(70); const knoid = snap();
+    const hw = OUT_W / 2, hh = OUT_H / 2;
+    [[classic, 0, 0, 'CLÁSICO', '#ffffff'], [modern, hw, 0, 'MODERNO', '#7ee05a'], [rogue, 0, hh, 'ROGUELIKE', '#ffd23f'], [knoid, hw, hh, 'KROSTNOID', '#3fa7ff']]
+      .forEach(([img, x, y, label, color]) => { cover(img, x + 4, y + 4, hw - 8, hh - 8); tag(label, x + 30, y + 30, color); });
+    const g = o.createRadialGradient(OUT_W / 2, OUT_H / 2, 80, OUT_W / 2, OUT_H / 2, 760);
+    g.addColorStop(0, 'rgba(0,0,0,0.85)'); g.addColorStop(0.55, 'rgba(0,0,0,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    o.fillStyle = g; o.fillRect(0, 0, OUT_W, OUT_H);
+    o.fillStyle = 'rgba(0, 0, 0, 0.55)'; o.fillRect(OUT_W / 2 - 520, OUT_H / 2 - 190, 1040, 380);
+    text('4 FORMAS DE JUGAR', OUT_W / 2, OUT_H / 2 - 120, 30, '#ffffff');
+    logo(OUT_W / 2, OUT_H / 2 + 70, 170);
+    text('JUEGA GRATIS · krost22.github.io/pong', OUT_W / 2, OUT_H / 2 + 150, 26, '#7ee05a');
+  },
+  // 2. Modo moderno: gol de fuego que quema el césped
+  fire() {
+    startPong('modern'); cheat = follow; step(150);
+    P.ball.vx = 330; P.ball.vy = 30; P.ball.x = 150; P.ball.y = 80; forceGoal = 60;
+    for (let i = 0; i < 80 && P.right.score === 0; i++) step(1);
+    step(14);
+    cover(snap(), 0, 0, OUT_W, OUT_H);
+    band(OUT_H - 380, 380, 0.8);
+    text('GOLES DE FUEGO', 90, OUT_H - 230, 72, '#ffb42e', 'left');
+    text('LA PELOTA ARDE Y EL CÉSPED SE QUEMA', 94, OUT_H - 165, 24, '#ffffff', 'left');
+    text('MODO MODERNO · POWER-UPS · REGALOS', 94, OUT_H - 120, 18, '#7ee05a', 'left', null);
+    logo(OUT_W - 300, OUT_H - 175, 90);
+    text('krost22.github.io/pong', OUT_W - 90, OUT_H - 90, 24, '#ffffff', 'right');
+  },
+  // 3. RogueLike: el Dragón enfurecido y las cartas de mejora
+  rogue() {
+    rogueRoom({ floor: 3, room: 3, doors: ['boss'], hearts: 4 }, 'boss'); cheat = follow; step(120);
+    P.left.score = 4; P.rogue.onGoal('left', false); step(150); P.powerups.spawnGhosts(2, true); step(20);
+    cover(snap(), 0, 0, OUT_W, OUT_H);
+    o.fillStyle = 'rgba(0,0,0,0.35)'; o.fillRect(0, 0, OUT_W, OUT_H);
+    band(0, 330, 0.8);
+    text('ROGUELIKE', 90, 160, 80, '#ffd23f', 'left');
+    text('3 PISOS · 17 CARTAS · JEFES', 94, 232, 26, '#ffffff', 'left');
+    text('¿PODRÁS VENCER AL DRAGÓN?', 94, 282, 20, '#ff7a1f', 'left', null);
+    const cw = 300, ch = 260, cy = OUT_H - ch - 90, cx = OUT_W / 2 - (cw * 3 + 60) / 2 + 380;
+    card(cx, cy, cw, ch, 'RARA', '#3fa7ff', 'VAMPIRO', ['CADA 3 GOLES', 'RECUPERAS 1 VIDA']);
+    card(cx + cw + 30, cy - 30, cw, ch, 'LEGENDARIA', '#ffd23f', 'GOL DE ORO', ['LOS GOLES DE FUEGO', 'CUENTAN DOBLE']);
+    card(cx + (cw + 30) * 2, cy, cw, ch, 'COMÚN', '#c8d0d8', 'EFECTO', ['TUS GOLPES SALEN', 'CON MÁS ÁNGULO']);
+    logo(220, OUT_H - 130, 80);
+  },
+  // 4. KrostNoid (vertical, formato historia)
+  knoid() {
+    toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(260);
+    P.knoid.spawnShip(); P.knoid.spawnShip(); P.knoid.applyCapsule('F'); P.knoid.applyCapsule('B'); step(90);
+    cover(snap(), 0, 0, OUT_W, OUT_H);
+    panel(OUT_H * 0.40, 300, '#3fa7ff');
+    logo(OUT_W / 2, OUT_H * 0.40 + 110, 70);
+    text('KROSTNOID', OUT_W / 2, OUT_H * 0.40 + 200, 76, '#3fa7ff');
+    text('NAVES · COMBOS · CÁPSULAS', OUT_W / 2, OUT_H * 0.40 + 255, 24, '#ffffff');
+    panel(OUT_H - 250, 210, '#7ee05a');
+    footer(OUT_H - 175);
+  },
+  // 5. Pista de hielo del RogueLike (vertical)
+  ice() {
+    rogueRoom({ floor: 2, room: 3, doors: ['boss'], hearts: 5 }, 'boss'); cheat = follow; step(160); P.left.score = 3; P.powerups.spawnGhosts(2); step(25);
+    cover(snap(), 0, 0, OUT_W, OUT_H);
+    panel(OUT_H * 0.58, 300, '#9fe6ff');
+    logo(OUT_W / 2, OUT_H * 0.58 + 110, 70);
+    text('PISTA DE HIELO', OUT_W / 2, OUT_H * 0.58 + 200, 62, '#9fe6ff');
+    text('ROGUELIKE · EL REY DE HIELO', OUT_W / 2, OUT_H * 0.58 + 255, 24, '#ffffff');
+    panel(OUT_H - 250, 210, '#7ee05a');
+    footer(OUT_H - 175);
+  },
+};
+
+let fontDone = false;
+Promise.race([document.fonts.load(`40px ${FONT}`), new Promise((r) => setTimeout(r, 3000))]).finally(() => { fontDone = true; });
+window.make = () => {
+  const w = frameEl.contentWindow;
+  if (!fontDone || !w || !w.__pong || !w.__raf) return null;
+  W = w; D = W.document; P = W.__pong; gt = W.performance.now();
+  o.fillStyle = '#000'; o.fillRect(0, 0, OUT_W, OUT_H);
+  IMAGES[q.get('img')]();
+  return out.toDataURL('image/png');
+};
+</script>
+</body>
+</html>

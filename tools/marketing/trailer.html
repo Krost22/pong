@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=block" rel="stylesheet">
+<style>
+  body { margin: 0; background: #000; overflow: hidden; }
+  #out { position: absolute; left: 0; top: 0; z-index: 2; }
+  #g { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; border: 0; z-index: 1; }
+</style>
+</head>
+<body>
+<canvas id="out" width="1280" height="720"></canvas>
+<iframe id="g" src="/game/index.html?debug"></iframe>
+<script>
+// Tráiler: se graba fotograma a fotograma desde el juego real (iframe con requestAnimationFrame controlado)
+const OUT_W = 1280, OUT_H = 720, FONT = '"Press Start 2P", "Courier New", monospace';
+const out = document.getElementById('out');
+const o = out.getContext('2d');
+let W, D, P, gt = 0, cheat = null, forceGoal = 0;
+const $ = (id) => D.getElementById(id);
+const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
+
+function step(n = 2) {
+  for (let i = 0; i < n; i++) {
+    if (cheat) cheat();
+    if (forceGoal > 0) { forceGoal--; P.right.y = P.ball.y > 90 ? 0 : 200; }
+    gt += 1000 / 60;
+    W.__raf(gt);
+  }
+}
+
+function toMenu() {
+  if (P.state === 'play' || P.state === 'serve') { $('btn-pause').click(); $('btn-exit').click(); }
+  else if (P.state === 'between') { [...$('rogue-actions').children].find((b) => /MENÚ/.test(b.textContent)).click(); }
+  else if (P.state === 'over') { $('btn-over-exit').click(); }
+}
+const pick = (sel) => D.querySelector(sel).click();
+function startPong(style) {
+  toMenu();
+  pick("[data-game='pong']");
+  pick(`[data-style='${style}']`);
+  pick("[data-mode='com']");
+  $('btn-start').click();
+}
+const follow = () => { if (P.state === 'play' || P.state === 'serve') P.left.y = Math.max(0, P.ball.y - P.left.h / 2 + 3); };
+const knoidFollow = () => {
+  const b = P.knoid.balls.filter((x) => !x.stuck).sort((a, c) => c.y - a.y)[0];
+  P.touch.knoid = b ? b.x + 2 + Math.sin(gt / 600) * 8 : null;
+};
+function rogueRoom(patch, door) {
+  toMenu();
+  W.localStorage.setItem('pong.roguelike.save', JSON.stringify({ v: 1, run: Object.assign({
+    floor: 1, room: 0, hearts: 5, maxHearts: 6, coins: 42, stacks: {}, goals: 0, rooms: 0, bosses: 0, revived: false, vamp: 0, path: [],
+  }, patch) }));
+  pick("[data-game='pong']");
+  pick("[data-game='roguelike']");
+  $('btn-continue').click();
+  [...$('rogue-items').children].find((b) => b.classList.contains(door)).click();
+}
+
+const scenes = [
+  { n: 75, kind: 'intro' },
+  { n: 66, kind: 'logo', setup: () => { toMenu(); pick("[data-game='pong']"); pick("[data-style='modern']"); step(120); } },
+  { n: 75, title: 'CLÁSICO', sub: 'EL PONG DE SIEMPRE', color: '#ffffff',
+    setup: () => { startPong('classic'); cheat = follow; step(70); } },
+  { n: 150, title: 'MODERNO', sub: 'FUEGO · POWER-UPS · CÉSPED VIVO', color: '#7ee05a',
+    setup: () => { startPong('modern'); cheat = follow; step(80); },
+    events: {
+      8: () => P.powerups.gifts.push({ x: 152, y: Math.max(6, Math.min(P.ball.y - 6, 150)), life: 12, t: 0, colors: ['#ff5a4f', '#b8322a', '#ffd23f'] }),
+      50: () => { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx *= 320 / s; P.ball.vy *= 320 / s; },
+      95: () => { P.ball.vx = 330; P.ball.vy = 40; P.ball.x = 200; forceGoal = 40; },
+    } },
+  { n: 72, title: 'ROGUELIKE', sub: '3 PISOS · CARTAS · JEFES', color: '#ffd23f',
+    setup: () => { rogueRoom({ room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 2; } },
+  { n: 62, title: 'PISTA DE HIELO', sub: 'EL REY DE HIELO', color: '#9fe6ff',
+    setup: () => { rogueRoom({ floor: 2, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 2; P.powerups.spawnGhosts(2); } },
+  { n: 84, title: 'EL VOLCÁN', sub: 'DERROTA AL DRAGÓN', color: '#ff7a1f',
+    setup: () => { rogueRoom({ floor: 3, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 4; P.rogue.onGoal('left', false); },
+    events: { 30: () => P.rogue.onGoal('right', true) } },
+  { n: 150, title: 'KROSTNOID', sub: 'NAVES · COMBOS · CÁPSULAS', color: '#3fa7ff',
+    setup: () => { toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(150); },
+    events: { 4: () => { P.knoid.spawnShip(); P.knoid.spawnShip(); }, 30: () => P.knoid.applyCapsule('F'), 95: () => P.knoid.applyCapsule('X') } },
+  { n: 126, kind: 'outro', setup: () => { cheat = null; toMenu(); pick("[data-game='roguelike']"); step(90); } },
+];
+const starts = [];
+scenes.reduce((acc, s) => { starts.push(acc); return acc + s.n; }, 0);
+window.TOTAL_FRAMES = scenes.reduce((a, s) => a + s.n, 0);
+let current = -1;
+
+function drawGame(alpha = 1, zoom = 1) {
+  const c = $('game');
+  const s = Math.min(OUT_W / c.width, OUT_H / c.height) * zoom;
+  const w = c.width * s, h = c.height * s;
+  o.imageSmoothingEnabled = false;
+  o.globalAlpha = alpha;
+  o.drawImage(c, (OUT_W - w) / 2, (OUT_H - h) / 2, w, h);
+  o.globalAlpha = 1;
+}
+
+// La fuente pixel no tiene mayúsculas con tilde: se escriben sin ella
+const plain = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function text(str, x, y, size, color, align = 'center', shadow = '#000') {
+  str = plain(str);
+  o.font = `${size}px ${FONT}`;
+  o.textAlign = align;
+  o.textBaseline = 'alphabetic';
+  if (shadow) { o.fillStyle = shadow; o.fillText(str, x + Math.max(2, size / 12), y + Math.max(2, size / 12)); }
+  o.fillStyle = color;
+  o.fillText(str, x, y);
+}
+
+// Logo PONG con sombras de color como el menú moderno
+function logo(cx, cy, size, k, label = 'PONG') {
+  const s = size * (0.7 + 0.3 * ease(k));
+  o.globalAlpha = ease(k);
+  o.font = `${s}px ${FONT}`;
+  o.textAlign = 'center';
+  const off = s / 14;
+  o.fillStyle = '#1d5fa8'; o.fillText(label, cx + off * 2, cy + off * 2);
+  o.fillStyle = '#ff5a4f'; o.fillText(label, cx + off, cy + off);
+  o.fillStyle = '#ffd23f'; o.fillText(label, cx, cy);
+  o.globalAlpha = 1;
+}
+
+function lowerThird(title, sub, color, k) {
+  title = plain(title);
+  sub = plain(sub);
+  const e = ease(k * 1.6);
+  o.font = `44px ${FONT}`;
+  const tw = Math.max(o.measureText(title).width, (o.font = `18px ${FONT}`, o.measureText(sub).width)) + 70;
+  const x = 60 - (1 - e) * (tw + 80), y = OUT_H - 130;
+  o.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  o.fillRect(x - 24, y - 64, tw, 112);
+  o.fillStyle = color;
+  o.fillRect(x - 24, y - 64, 10, 112);
+  text(title, x, y, 44, color, 'left');
+  text(sub, x, y + 34, 18, '#ffffff', 'left');
+}
+
+function sparkles(f, n, color) {
+  for (let i = 0; i < n; i++) {
+    const a = (i * 137.5 + f * 2) % 360, r = 120 + (i * 53) % 380;
+    const x = OUT_W / 2 + Math.cos(a) * r * 1.6, y = OUT_H / 2 + Math.sin(a) * r * 0.8;
+    o.fillStyle = (i + Math.floor(f / 3)) % 4 ? '#3a4a7a' : color;
+    o.fillRect(Math.round(x / 6) * 6, Math.round(y / 6) * 6, 6, 6);
+  }
+}
+
+window.renderFrame = (i) => {
+  let si = scenes.length - 1;
+  while (starts[si] > i) si--;
+  const sc = scenes[si], f = i - starts[si], k = f / sc.n;
+  if (si !== current) {
+    current = si;
+    if (sc.setup) sc.setup();
+  }
+  if (sc.events && sc.events[f]) sc.events[f]();
+  if (sc.kind !== 'intro') step(2);
+
+  o.fillStyle = '#000';
+  o.fillRect(0, 0, OUT_W, OUT_H);
+
+  if (sc.kind === 'intro') {
+    sparkles(f, 40, '#ffd23f');
+    const word = 'KROSTGAMES';
+    const shown = Math.min(word.length, Math.floor(f / 3));
+    text(word.slice(0, shown), OUT_W / 2, OUT_H / 2 + 10, 64, '#ffd23f');
+    if (f > 38) { o.globalAlpha = ease((f - 38) / 15); text('PRESENTA', OUT_W / 2, OUT_H / 2 + 80, 22, '#ffffff'); o.globalAlpha = 1; }
+    if (f > sc.n - 8) { o.fillStyle = `rgba(0,0,0,${(f - (sc.n - 8)) / 8})`; o.fillRect(0, 0, OUT_W, OUT_H); }
+  } else if (sc.kind === 'logo') {
+    drawGame(0.35);
+    logo(OUT_W / 2, OUT_H / 2, 150, f / 14);
+    if (f > 18) { o.globalAlpha = ease((f - 18) / 12); text('CLÁSICO · MODERNO · ROGUELIKE · KROSTNOID', OUT_W / 2, OUT_H / 2 + 90, 20, '#ffffff'); o.globalAlpha = 1; }
+  } else if (sc.kind === 'outro') {
+    drawGame(0.3);
+    logo(OUT_W / 2, OUT_H / 2 - 40, 150, f / 14);
+    if (f > 16) { o.globalAlpha = ease((f - 16) / 12); text('JUEGA GRATIS', OUT_W / 2, OUT_H / 2 + 60, 30, '#7ee05a'); o.globalAlpha = 1; }
+    if (f > 30) { o.globalAlpha = ease((f - 30) / 12); text('krost22.github.io/pong', OUT_W / 2, OUT_H / 2 + 115, 26, '#ffffff'); text('NAVEGADOR · ANDROID', OUT_W / 2, OUT_H / 2 + 160, 16, '#9fd4ff'); o.globalAlpha = 1; }
+    if (f > 44) { o.globalAlpha = ease((f - 44) / 12); text('KROSTGAMES · 2026', OUT_W / 2, OUT_H - 40, 16, '#ffd23f'); o.globalAlpha = 1; }
+    if (f > sc.n - 15) { o.fillStyle = `rgba(0,0,0,${(f - (sc.n - 15)) / 15})`; o.fillRect(0, 0, OUT_W, OUT_H); }
+  } else {
+    drawGame(1, 1 + 0.04 * (1 - ease(f / 10)));
+    lowerThird(sc.title, sc.sub, sc.color, f / 20);
+    if (f < 5) { o.fillStyle = `rgba(255,255,255,${0.75 * (1 - f / 5)})`; o.fillRect(0, 0, OUT_W, OUT_H); }
+  }
+  return out.toDataURL('image/jpeg', 0.92);
+};
+
+// El grabador pregunta hasta que el juego del iframe esté listo (y la fuente cargada o descartada)
+let fontDone = false;
+Promise.race([document.fonts.load(`40px ${FONT}`), new Promise((r) => setTimeout(r, 3000))]).finally(() => { fontDone = true; });
+window.init = () => {
+  const w = document.getElementById('g').contentWindow;
+  if (!fontDone || !w || !w.__pong || !w.__raf) return null;
+  W = w;
+  D = W.document;
+  P = W.__pong;
+  gt = W.performance.now();
+  return window.TOTAL_FRAMES;
+};
+</script>
+</body>
+</html>

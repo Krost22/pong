@@ -6,3 +6,10 @@
 android/build/
 *.apk
 *.idsig
+
+# Marketing: resultados y archivos temporales de la grabación
+/marketing/
+tools/marketing/frames/
+tools/marketing/profile*/
+tools/marketing/music.wav
+tools/marketing/*.log
