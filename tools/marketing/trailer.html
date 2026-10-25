@@ -124,6 +124,23 @@ function logo(cx, cy, size, k, label = 'PONG') {
   o.globalAlpha = 1;
 }
 
+// Logo de itch.io en pixel art: cuadrado rojo de la marca con la tienda (toldo festoneado y fachada)
+function itchLogo(x, y, size) {
+  const p = size / 16; // cuadrícula de 16x16
+  const px = (cx, cy, w, h, color) => { o.fillStyle = color; o.fillRect(Math.round(x + cx * p), Math.round(y + cy * p), Math.ceil(w * p), Math.ceil(h * p)); };
+  px(1, 0, 14, 16, '#fa5c5c');
+  px(0, 1, 16, 14, '#fa5c5c');
+  // Toldo: franja superior y cinco festones
+  px(3, 3, 10, 2, '#ffffff');
+  px(2, 4, 12, 1, '#ffffff');
+  for (let i = 0; i < 5; i++) px(2 + i * 2.4, 5, 2, 2, i % 2 ? '#fde3e3' : '#ffffff');
+  // Fachada con puerta y dos ventanas
+  px(3, 8, 10, 5, '#ffffff');
+  px(4, 9, 2, 2, '#fa5c5c');
+  px(10, 9, 2, 2, '#fa5c5c');
+  px(7, 10, 2, 3, '#fa5c5c');
+}
+
 function lowerThird(title, sub, color, k) {
   title = plain(title);
   sub = plain(sub);
@@ -177,7 +194,18 @@ window.renderFrame = (i) => {
     drawGame(0.3);
     logo(OUT_W / 2, OUT_H / 2 - 40, 150, f / 14);
     if (f > 16) { o.globalAlpha = ease((f - 16) / 12); text('JUEGA GRATIS', OUT_W / 2, OUT_H / 2 + 60, 30, '#7ee05a'); o.globalAlpha = 1; }
-    if (f > 30) { o.globalAlpha = ease((f - 30) / 12); text('krost22.github.io/pong', OUT_W / 2, OUT_H / 2 + 115, 26, '#ffffff'); text('NAVEGADOR · ANDROID', OUT_W / 2, OUT_H / 2 + 160, 16, '#9fd4ff'); o.globalAlpha = 1; }
+    if (f > 30) {
+      o.globalAlpha = ease((f - 30) / 12);
+      // Logo de itch.io a la izquierda del enlace
+      const url = 'krostgames.itch.io/pong';
+      o.font = `26px ${FONT}`;
+      const uw = o.measureText(url).width, badge = 64, gap = 22;
+      const x0 = OUT_W / 2 - (badge + gap + uw) / 2, y0 = OUT_H / 2 + 76;
+      itchLogo(x0, y0, badge);
+      text(url, x0 + badge + gap, OUT_H / 2 + 120, 26, '#ffffff', 'left');
+      text('NAVEGADOR · ANDROID', OUT_W / 2, OUT_H / 2 + 172, 16, '#9fd4ff');
+      o.globalAlpha = 1;
+    }
     if (f > 44) { o.globalAlpha = ease((f - 44) / 12); text('KROSTGAMES · 2026', OUT_W / 2, OUT_H - 40, 16, '#ffd23f'); o.globalAlpha = 1; }
     if (f > sc.n - 15) { o.fillStyle = `rgba(0,0,0,${(f - (sc.n - 15)) / 15})`; o.fillRect(0, 0, OUT_W, OUT_H); }
   } else {
