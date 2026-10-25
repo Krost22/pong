@@ -1,0 +1,179 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* game.js fija el tamaño exacto según la pantalla y la orientación */
+#screen {
+  position: relative;
+  box-shadow: 0 0 0 3px #fff;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+#hud {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: clamp(9px, 1.6vmax, 14px);
+  letter-spacing: 1px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+button {
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: clamp(12px, 2vmax, 18px);
+  color: #fff;
+  background: #000;
+  border: 3px solid #fff;
+  padding: 8px 16px;
+  cursor: pointer;
+  min-width: 150px;
+  touch-action: manipulation;
+}
+
+button:hover,
+button:focus-visible,
+button.selected {
+  background: #fff;
+  color: #000;
+  outline: none;
+}
+
+button.big {
+  font-size: clamp(16px, 3vmax, 26px);
+  padding: 10px 32px;
+}
+
+/* Pausa sobre la línea central, lejos de las paletas */
+button.corner {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 16px;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+
+#screen.portrait button.corner {
+  top: 50%;
+  left: auto;
+  right: 6px;
+  transform: translateY(-50%);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2.2vmin, 18px);
+  background: #000;
+  text-align: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+.overlay > * {
+  max-width: 100%;
+}
+
+.overlay.translucent {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+h1 {
+  font-size: clamp(44px, 11vmin, 120px);
+  letter-spacing: 0.25em;
+  margin-right: -0.25em;
+  line-height: 1;
+}
+
+h2 {
+  font-size: clamp(22px, 5vmin, 44px);
+  letter-spacing: 4px;
+}
+
+#final {
+  font-size: clamp(28px, 6vmin, 56px);
+  letter-spacing: 8px;
+}
+
+.modes {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.help {
+  font-size: clamp(9px, 1.5vmax, 14px);
+  line-height: 1.7;
+  opacity: 0.75;
+}
+
+#msg {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translate(-50%, -50%);
+  background: #000;
+  border: 3px solid #fff;
+  padding: 6px 18px;
+  font-size: clamp(16px, 3.5vmin, 30px);
+  letter-spacing: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Pantallas bajas (móvil en horizontal): menú más compacto */
+@media (max-height: 420px) {
+  .overlay { gap: 6px; padding: 8px; }
+  h1 { font-size: 40px; }
+  button { padding: 5px 12px; }
+  button.big { padding: 6px 24px; font-size: 18px; }
+  .help { line-height: 1.4; }
+}
+
+.hidden {
+  display: none !important;
+}

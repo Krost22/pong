@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Pong</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="screen">
+    <canvas id="game"></canvas>
+    <div id="hud" class="hidden"></div>
+    <button id="btn-pause" class="corner hidden" aria-label="Pausa">II</button>
+    <div id="msg" class="hidden"></div>
+
+    <section id="menu" class="overlay">
+      <h1>PONG</h1>
+      <div class="modes">
+        <button class="mode selected" data-mode="com">1 JUGADOR vs COM</button>
+        <button class="mode" data-mode="2p">2 JUGADORES</button>
+      </div>
+      <button id="btn-start" class="big">INICIO</button>
+      <button id="btn-quit">SALIR</button>
+      <p class="help">
+        Táctil: arrastra el dedo en tu mitad de pantalla<br>
+        Teclado: J1 W / S · J2 ↑ / ↓ · P pausa · M sonido<br>
+        Gana el primero en llegar a 11
+      </p>
+      <p id="quit-msg" class="help hidden">Cierra la pestaña para salir.</p>
+    </section>
+
+    <section id="pause" class="overlay translucent hidden">
+      <h2>PAUSA</h2>
+      <button id="btn-resume" class="big">SEGUIR</button>
+      <button id="btn-new">JUEGO NUEVO</button>
+      <button id="btn-exit">SALIR</button>
+    </section>
+
+    <section id="over" class="overlay translucent hidden">
+      <h2 id="winner"></h2>
+      <p id="final"></p>
+      <button id="btn-again" class="big">JUEGO NUEVO</button>
+      <button id="btn-over-exit">SALIR</button>
+    </section>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

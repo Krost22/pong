@@ -1,0 +1,501 @@
+(() => {
+  'use strict';
+
+  // --- Configuración ---
+  // El campo se modela siempre en horizontal: W es el eje entre jugadores y H el eje de las paletas.
+  // En vertical solo cambia el dibujo y la lectura táctil (J1 abajo, J2/COM arriba).
+  const W = 320, MIN_H = 150, MAX_H = 240;
+  const SCALE = 4; // resolución interna: el movimiento es suave aunque los bloques se vean pixelados
+  const WIN_SCORE = 11;
+  const PADDLE_W = 4, PADDLE_H = 24, PADDLE_SPEED = 260, PADDLE_MARGIN = 12;
+  const TOUCH_SPEED = 1400; // la paleta sigue al dedo casi al instante, sin teletransportarse
+  const BALL_SIZE = 4, BALL_SPEED = 140, BALL_MAX_SPEED = 330, BALL_ACCEL = 1.05;
+  const AI_SPEED = 105, AI_REACTION = 0.14;
+  const LEVEL_STEP = 0.10, GOALS_PER_LEVEL = 3; // +10% de dificultad cada 3 goles
+  const SERVE_DELAY = 1;
+  const MAX_STEP = 1 / 240; // subpasos para que la pelota no atraviese las paletas
+
+  // Dígitos de 3x5 píxeles, estilo marcador clásico
+  const DIGITS = [
+    '111101101101111', '001001001001001', '111001111100111', '111001111001111',
+    '101101111001001', '111100111001111', '111100111101111', '111001001001001',
+    '111101111101111', '111101111001111',
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const screenEl = $('screen');
+  const canvas = $('game');
+  const ctx = canvas.getContext('2d');
+
+  const left = { x: PADDLE_MARGIN, y: 0, score: 0 };
+  const right = { x: W - PADDLE_MARGIN - PADDLE_W, y: 0, score: 0 };
+  const ball = { x: 0, y: 0, vx: 0, vy: 0 };
+  const ai = { timer: 0, target: 0, error: 0 };
+  const keys = new Map(); // tecla pulsada -> orden de pulsación
+  const touch = { left: null, right: null };
+  const pointers = new Map(); // pointerId -> 'left' | 'right'
+  let pressSeq = 0;
+
+  let H = MAX_H;
+  let portrait = false;
+  let mode = 'com';
+  let state = 'menu'; // menu | serve | play | paused | over
+  let pausedFrom = 'play';
+  let serveTimer = 0, serveDir = 1;
+  let level = 0;
+  let msgTimer = 0;
+  let muted = false;
+  let audio = null;
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const difficulty = () => (mode === 'com' ? Math.pow(1 + LEVEL_STEP, level) : 1);
+
+  // --- Pantalla y orientación ---
+  function layout() {
+    const margin = 6;
+    const vw = window.innerWidth - margin * 2, vh = window.innerHeight - margin * 2;
+    portrait = vh > vw;
+    screenEl.classList.toggle('portrait', portrait);
+
+    // El eje corto del campo se adapta a la proporción de la pantalla para ocuparla entera
+    const newH = Math.round(clamp(W * Math.min(vw, vh) / Math.max(vw, vh), MIN_H, MAX_H));
+    if (newH !== H) {
+      const r = newH / H;
+      const rescale = (y, size) => clamp((y + size / 2) * r - size / 2, 0, newH - size);
+      left.y = rescale(left.y, PADDLE_H);
+      right.y = rescale(right.y, PADDLE_H);
+      ball.y = rescale(ball.y, BALL_SIZE);
+      ai.target *= r;
+      H = newH;
+    }
+
+    const cw = portrait ? H : W, ch = portrait ? W : H;
+    canvas.width = cw * SCALE;
+    canvas.height = ch * SCALE;
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    const k = Math.min(vw / cw, vh / ch);
+    screenEl.style.width = `${Math.floor(cw * k)}px`;
+    screenEl.style.height = `${Math.floor(ch * k)}px`;
+  }
+
+  // --- Sonido ---
+  function beep(freq, dur) {
+    if (muted) return;
+    try {
+      audio ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.06;
+      osc.connect(gain).connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + dur);
+    } catch (_) { /* sin audio */ }
+  }
+
+  // --- Flujo de juego ---
+  function centerBall() {
+    ball.x = (W - BALL_SIZE) / 2;
+    ball.y = (H - BALL_SIZE) / 2;
+    ball.vx = ball.vy = 0;
+  }
+
+  function resetField() {
+    left.y = right.y = (H - PADDLE_H) / 2;
+    ai.target = H / 2;
+    centerBall();
+  }
+
+  function newGame() {
+    left.score = right.score = 0;
+    level = 0;
+    resetField();
+    releaseAll();
+    hideMsg();
+    serveDir = Math.random() < 0.5 ? -1 : 1;
+    startServe();
+    showScreen('game');
+    updateHud();
+    beep(660, 0.08);
+  }
+
+  function startServe() {
+    centerBall();
+    serveTimer = SERVE_DELAY;
+    state = 'serve';
+  }
+
+  function launch() {
+    const angle = (Math.random() * 2 - 1) * Math.PI / 6;
+    const speed = BALL_SPEED * difficulty();
+    ball.vx = Math.cos(angle) * speed * serveDir;
+    ball.vy = Math.sin(angle) * speed;
+    rollAiError();
+    state = 'play';
+  }
+
+  function goal(scorer) {
+    scorer.score++;
+    beep(490, 0.25);
+    if (scorer.score >= WIN_SCORE) {
+      endGame(scorer);
+      return;
+    }
+    if (mode === 'com') {
+      const newLevel = Math.floor((left.score + right.score) / GOALS_PER_LEVEL);
+      if (newLevel !== level) {
+        level = newLevel;
+        showMsg(`NIVEL ${level + 1}`, 1.6);
+        setTimeout(() => beep(880, 0.12), 280);
+      }
+    }
+    updateHud();
+    serveDir = scorer === left ? 1 : -1; // saca hacia quien recibió el gol
+    startServe();
+  }
+
+  function endGame(winner) {
+    state = 'over';
+    centerBall();
+    hideMsg();
+    const name = winner === left ? 'JUGADOR 1' : (mode === 'com' ? 'COM' : 'JUGADOR 2');
+    $('winner').textContent = `¡GANA ${name}!`;
+    $('final').textContent = `${left.score} - ${right.score}`;
+    updateHud();
+    showScreen('over');
+  }
+
+  function toMenu() {
+    state = 'menu';
+    left.score = right.score = 0;
+    level = 0;
+    resetField();
+    releaseAll();
+    hideMsg();
+    showScreen('menu');
+  }
+
+  function pause() {
+    if (state !== 'play' && state !== 'serve') return;
+    pausedFrom = state;
+    state = 'paused';
+    releaseAll();
+    showScreen('pause');
+  }
+
+  function resume() {
+    if (state !== 'paused') return;
+    state = pausedFrom;
+    showScreen('game');
+  }
+
+  function togglePause() {
+    if (state === 'paused') resume();
+    else pause();
+  }
+
+  // --- Actualización ---
+  function update(dt) {
+    if (msgTimer > 0 && (msgTimer -= dt) <= 0) hideMsg();
+    if (state !== 'serve' && state !== 'play') return;
+
+    movePaddles(dt);
+
+    if (state === 'serve') {
+      if ((serveTimer -= dt) <= 0) launch();
+      return;
+    }
+
+    let t = dt;
+    while (t > 0 && state === 'play') {
+      const step = Math.min(t, MAX_STEP);
+      stepBall(step);
+      t -= step;
+    }
+  }
+
+  // Si se mantienen arriba y abajo a la vez, manda la última tecla pulsada
+  function axis(upCodes, downCodes) {
+    const latest = (codes) => Math.max(0, ...codes.map((c) => keys.get(c) || 0));
+    const up = latest(upCodes), down = latest(downCodes);
+    return up === down ? 0 : (down > up ? 1 : -1);
+  }
+
+  function movePaddles(dt) {
+    if (mode === 'com') {
+      drive(left, axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']), touch.left, dt);
+      updateAI(dt);
+    } else {
+      drive(left, axis(['KeyW'], ['KeyS']), touch.left, dt);
+      drive(right, axis(['ArrowUp'], ['ArrowDown']), touch.right, dt);
+    }
+  }
+
+  function moveToward(p, y, maxStep) {
+    p.y = clamp(p.y + clamp(y - p.y, -maxStep, maxStep), 0, H - PADDLE_H);
+  }
+
+  function drive(p, dir, touchY, dt) {
+    if (dir) p.y = clamp(p.y + dir * PADDLE_SPEED * dt, 0, H - PADDLE_H);
+    else if (touchY !== null) moveToward(p, touchY - PADDLE_H / 2, TOUCH_SPEED * dt);
+  }
+
+  function rollAiError() {
+    ai.error = (Math.random() * 2 - 1) * PADDLE_H * 0.45;
+  }
+
+  function updateAI(dt) {
+    const f = difficulty();
+    if ((ai.timer -= dt) <= 0) {
+      ai.timer = AI_REACTION / f;
+      ai.target = ball.vx > 0 ? ball.y + BALL_SIZE / 2 + ai.error : H / 2;
+    }
+    moveToward(right, ai.target - PADDLE_H / 2, AI_SPEED * f * dt);
+  }
+
+  function overlaps(p) {
+    return ball.x < p.x + PADDLE_W && ball.x + BALL_SIZE > p.x &&
+           ball.y < p.y + PADDLE_H && ball.y + BALL_SIZE > p.y;
+  }
+
+  function hit(p, dir) {
+    const rel = clamp((ball.y + BALL_SIZE / 2 - (p.y + PADDLE_H / 2)) / (PADDLE_H / 2 + BALL_SIZE / 2), -1, 1);
+    const angle = rel * Math.PI / 3;
+    const speed = Math.min(Math.hypot(ball.vx, ball.vy) * BALL_ACCEL, BALL_MAX_SPEED * difficulty());
+    ball.vx = Math.cos(angle) * speed * dir;
+    ball.vy = Math.sin(angle) * speed;
+    ball.x = dir > 0 ? p.x + PADDLE_W : p.x - BALL_SIZE;
+    if (dir > 0) rollAiError();
+    beep(459, 0.04);
+  }
+
+  function stepBall(dt) {
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    if (ball.y < 0) {
+      ball.y = 0;
+      ball.vy = Math.abs(ball.vy);
+      beep(226, 0.04);
+    } else if (ball.y > H - BALL_SIZE) {
+      ball.y = H - BALL_SIZE;
+      ball.vy = -Math.abs(ball.vy);
+      beep(226, 0.04);
+    }
+
+    if (ball.vx < 0 && overlaps(left)) hit(left, 1);
+    else if (ball.vx > 0 && overlaps(right)) hit(right, -1);
+
+    if (ball.x + BALL_SIZE < 0) goal(right);
+    else if (ball.x > W) goal(left);
+  }
+
+  // --- Dibujo ---
+  const snap = (v) => Math.round(v * SCALE) / SCALE;
+
+  // Rectángulo en coordenadas del campo; en vertical se gira para que J1 quede abajo
+  function rect(x, y, w, h) {
+    x = snap(x);
+    y = snap(y);
+    if (portrait) ctx.fillRect(y, W - x - w, h, w);
+    else ctx.fillRect(x, y, w, h);
+  }
+
+  function numberWidth(n, s) {
+    return String(n).length * 4 * s - s;
+  }
+
+  // Los números se dibujan en coordenadas de pantalla para que nunca salgan girados
+  function drawNumber(n, x, y, s) {
+    for (const ch of String(n)) {
+      const bits = DIGITS[+ch];
+      for (let i = 0; i < 15; i++) {
+        if (bits[i] === '1') ctx.fillRect(x + (i % 3) * s, y + Math.floor(i / 3) * s, s, s);
+      }
+      x += 4 * s;
+    }
+  }
+
+  function draw() {
+    const cw = portrait ? H : W, ch = portrait ? W : H;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.fillStyle = '#fff';
+
+    for (let y = 3; y < H; y += 12) rect(W / 2 - 1, y, 2, 6);
+
+    const s = 4;
+    if (portrait) {
+      drawNumber(right.score, 14, W / 2 - 16 - 5 * s, s);
+      drawNumber(left.score, 14, W / 2 + 16, s);
+    } else {
+      drawNumber(left.score, W / 2 - 24 - numberWidth(left.score, s), 12, s);
+      drawNumber(right.score, W / 2 + 24, 12, s);
+    }
+
+    rect(left.x, left.y, PADDLE_W, PADDLE_H);
+    rect(right.x, right.y, PADDLE_W, PADDLE_H);
+
+    const blinking = state === 'serve' && Math.floor(serveTimer * 6) % 2 === 1;
+    if (state !== 'over' && state !== 'menu' && !blinking) {
+      rect(ball.x, ball.y, BALL_SIZE, BALL_SIZE);
+    }
+  }
+
+  // --- Interfaz ---
+  function showScreen(name) {
+    for (const id of ['menu', 'pause', 'over']) $(id).classList.toggle('hidden', name !== id);
+    $('hud').classList.toggle('hidden', name === 'menu');
+    $('btn-pause').classList.toggle('hidden', name !== 'game');
+    $('quit-msg').classList.add('hidden');
+  }
+
+  function updateHud() {
+    $('hud').textContent = mode === 'com'
+      ? `COM · NIVEL ${level + 1} · ${Math.round(difficulty() * 100)}%`
+      : `2 JUGADORES · A ${WIN_SCORE}`;
+  }
+
+  function showMsg(text, seconds) {
+    const el = $('msg');
+    el.textContent = text;
+    el.classList.remove('hidden');
+    msgTimer = seconds;
+  }
+
+  function hideMsg() {
+    $('msg').classList.add('hidden');
+    msgTimer = 0;
+  }
+
+  function selectMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode').forEach((b) => b.classList.toggle('selected', b.dataset.mode === m));
+  }
+
+  function quit() {
+    // Dentro de la APK, Android expone AndroidApp.exit(); en el navegador solo se puede intentar cerrar
+    if (window.AndroidApp) {
+      window.AndroidApp.exit();
+      return;
+    }
+    window.close();
+    setTimeout(() => $('quit-msg').classList.remove('hidden'), 150);
+  }
+
+  document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => selectMode(b.dataset.mode)));
+  $('btn-start').addEventListener('click', newGame);
+  $('btn-quit').addEventListener('click', quit);
+  $('btn-pause').addEventListener('click', pause);
+  $('btn-resume').addEventListener('click', resume);
+  $('btn-new').addEventListener('click', newGame);
+  $('btn-exit').addEventListener('click', toMenu);
+  $('btn-again').addEventListener('click', newGame);
+  $('btn-over-exit').addEventListener('click', toMenu);
+  // Quitar el foco tras un clic para que Espacio/Enter no vuelvan a pulsar el botón
+  document.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => b.blur()));
+
+  // Botón "atrás" de Android: devuelve true si el juego lo gestionó
+  window.onAndroidBack = () => {
+    if (state === 'play' || state === 'serve') pause();
+    else if (state === 'paused') resume();
+    else if (state === 'over') toMenu();
+    else return false;
+    return true;
+  };
+
+  // --- Entrada: teclado ---
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+    if (!keys.has(e.code)) keys.set(e.code, ++pressSeq);
+    if (e.repeat) return;
+
+    if (state === 'menu') {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') selectMode('com');
+      else if (e.code === 'Digit2' || e.code === 'Numpad2') selectMode('2p');
+      else if (e.code === 'Enter') newGame();
+      return;
+    }
+    if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Space') togglePause();
+    else if (e.code === 'KeyN' || (state === 'over' && e.code === 'Enter')) newGame();
+    else if (e.code === 'KeyM') muted = !muted;
+  });
+  window.addEventListener('keyup', (e) => {
+    keys.delete(e.code);
+    // Con Cmd/Ctrl pulsado algunos navegadores no envían el keyup de las demás teclas
+    if (e.key === 'Meta' || e.key === 'Control') keys.clear();
+  });
+
+  function releaseAll() {
+    keys.clear();
+    pointers.clear();
+    touch.left = touch.right = null;
+  }
+
+  window.addEventListener('blur', () => {
+    releaseAll();
+    pause();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      releaseAll();
+      pause();
+    }
+  });
+
+  // --- Entrada: táctil / ratón ---
+  // Horizontal: mitad izquierda = J1, mitad derecha = J2. Vertical: mitad inferior = J1, superior = J2.
+  // Contra la COM, toda la pantalla controla a J1. La paleta sigue la posición del dedo.
+  function readPointer(e) {
+    const r = canvas.getBoundingClientRect();
+    return portrait
+      ? { side: e.clientY > r.top + r.height / 2 ? 'left' : 'right', pos: (e.clientX - r.left) / r.width * H }
+      : { side: e.clientX < r.left + r.width / 2 ? 'left' : 'right', pos: (e.clientY - r.top) / r.height * H };
+  }
+
+  function onPointerDown(e) {
+    if (state !== 'play' && state !== 'serve') return;
+    if (e.target.closest && e.target.closest('button')) return;
+    const p = readPointer(e);
+    const side = mode === '2p' ? p.side : 'left';
+    pointers.set(e.pointerId, side);
+    touch[side] = p.pos;
+    e.preventDefault();
+  }
+
+  function onPointerMove(e) {
+    const side = pointers.get(e.pointerId);
+    if (side) touch[side] = readPointer(e).pos;
+  }
+
+  function onPointerEnd(e) {
+    const side = pointers.get(e.pointerId);
+    if (!side) return;
+    pointers.delete(e.pointerId);
+    // Si otro dedo sigue en esa mitad, la paleta lo sigue a él
+    if (![...pointers.values()].includes(side)) touch[side] = null;
+  }
+
+  window.addEventListener('pointerdown', onPointerDown, { passive: false });
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', layout);
+
+  // --- Bucle principal ---
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  layout();
+  resetField();
+  requestAnimationFrame(frame);
+})();

@@ -1,0 +1,8 @@
+# Clave de firma de la APK: nunca subirla
+*.keystore
+*.jks
+
+# Salidas de compilación
+android/build/
+*.apk
+*.idsig
