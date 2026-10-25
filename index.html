@@ -17,19 +17,27 @@
     <section id="menu" class="overlay">
       <h1>PONG</h1>
       <div class="modes">
+        <button class="selected" data-game="pong">PONG</button>
+        <button data-game="survival">SUPERVIVENCIA</button>
+        <button data-game="krostnoid">KROSTNOID</button>
+      </div>
+      <div id="row-mode" class="modes">
         <button class="selected" data-mode="com">1 JUGADOR vs COM</button>
         <button data-mode="2p">2 JUGADORES</button>
       </div>
-      <div class="modes">
+      <div id="row-style" class="modes">
         <button class="selected" data-style="classic">CLÁSICO</button>
         <button data-style="modern">MODERNO</button>
       </div>
-      <button id="btn-start" class="big">INICIO</button>
-      <button id="btn-quit">SALIR</button>
+      <p id="game-info" class="info hidden"></p>
+      <div class="modes">
+        <button id="btn-start" class="big">INICIO</button>
+        <button id="btn-quit" class="big">SALIR</button>
+      </div>
       <p class="help">
-        Táctil: arrastra el dedo en tu mitad de pantalla<br>
-        Teclado: J1 W / S · J2 ↑ / ↓ · P pausa · M sonido<br>
-        Gana el primero en llegar a 11
+        <span id="help-touch"></span><br>
+        <span id="help-keys"></span><br>
+        <span id="help-goal">Gana el primero en llegar a 11</span>
       </p>
       <p id="version" class="help"></p>
       <p id="quit-msg" class="help hidden">Cierra la pestaña para salir.</p>
@@ -46,14 +54,19 @@
     <section id="over" class="overlay translucent hidden">
       <h2 id="winner"></h2>
       <p id="final"></p>
-      <button id="btn-again" class="big">JUEGO NUEVO</button>
-      <button id="btn-over-exit">SALIR</button>
+      <p id="record-line" class="hidden"></p>
+      <ol id="board" class="hidden"></ol>
+      <div class="modes">
+        <button id="btn-again" class="big">JUEGO NUEVO</button>
+        <button id="btn-over-exit" class="big">SALIR</button>
+      </div>
     </section>
   </div>
   <script src="version.js"></script>
   <script src="audio.js"></script>
   <script src="powerups.js"></script>
   <script src="modern.js"></script>
+  <script src="krostnoid.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

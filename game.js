@@ -14,6 +14,9 @@
   const LEVEL_STEP = 0.10, GOALS_PER_LEVEL = 3; // +10% de dificultad cada 3 goles
   const SERVE_DELAY = 1;
   const MAX_STEP = 1 / 240; // subpasos para que la pelota no atraviese las paletas
+  const SURVIVAL_START = 60, SURVIVAL_BONUS = 5; // segundos iniciales y por cada gol de J1
+  const BOARD_SIZE = 5;
+  const BOARD_KEYS = { survival: 'pong.survival.board', krostnoid: 'pong.krostnoid.board' };
 
   // Dígitos de 3x5 píxeles, estilo marcador clásico
   const DIGITS = [
@@ -35,14 +38,17 @@
   const ball = { x: 0, y: 0, vx: 0, vy: 0 };
   const ai = { left: { timer: 0, target: 0, error: 0 }, right: { timer: 0, target: 0, error: 0 } };
   const keys = new Map(); // tecla pulsada -> orden de pulsación
-  const touch = { left: null, right: null };
-  const pointers = new Map(); // pointerId -> 'left' | 'right'
+  const touch = { left: null, right: null, knoid: null };
+  const pointers = new Map(); // pointerId -> 'left' | 'right' | 'knoid'
+  // Supervivencia: tiempo restante, segundos de reloj congelado y récord al empezar la partida
+  const survival = { time: SURVIVAL_START, frozen: 0, record: 0, beaten: false };
   let pressSeq = 0;
 
   let H = MAX_H;
   let portrait = false;
-  let mode = 'com';      // com | 2p
-  let style = 'classic'; // classic | modern
+  let game = 'pong';     // pong | survival | krostnoid
+  let mode = 'com';      // com | 2p (solo Pong)
+  let style = 'classic'; // classic | modern (solo Pong)
   let state = 'serve';   // serve | play | paused | over
   let demo = true;       // partida automática de fondo mientras se ve el menú
   let pausedFrom = 'play';
@@ -52,12 +58,41 @@
   let muted = false;
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const difficulty = () => (mode === 'com' && !demo ? Math.pow(1 + LEVEL_STEP, level) : 1);
-  const modernOn = () => style === 'modern';
+  const isSurvival = () => game === 'survival';
+  const isKnoid = () => game === 'krostnoid';
+  const vsCom = () => isSurvival() || mode === 'com';
+  const difficulty = () => (vsCom() && !demo ? Math.pow(1 + LEVEL_STEP, level) : 1);
+  // Supervivencia usa el motor del Pong moderno
+  const modernOn = () => isSurvival() || style === 'modern';
   const sideOf = (p) => (p === left ? 'left' : 'right');
   // La demo del menú juega sin sonido
   const SILENT = new Proxy({}, { get: () => () => {} });
-  const sfx = () => (demo ? SILENT : window.PongAudio[style]);
+  const sfx = () => (demo ? SILENT : window.PongAudio[game === 'pong' ? style : 'modern']);
+
+  // --- Récords (se guardan en el dispositivo) ---
+  function loadBoard(key) {
+    try {
+      const board = JSON.parse(localStorage.getItem(key));
+      return Array.isArray(board) ? board : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  const bestScore = (key) => (loadBoard(key)[0] || { score: 0 }).score;
+
+  function saveScore(key, score) {
+    const board = loadBoard(key);
+    const best = board.length ? board[0].score : 0;
+    const entry = { score, date: new Date().toLocaleDateString('es', { day: '2-digit', month: '2-digit' }), id: Date.now() };
+    if (score > 0) { // las partidas sin puntos no entran en la tabla
+      board.push(entry);
+      board.sort((a, b) => b.score - a.score);
+      board.splice(BOARD_SIZE);
+      try { localStorage.setItem(key, JSON.stringify(board)); } catch (_) { /* sin almacenamiento */ }
+    }
+    return { board, entry, best: Math.max(best, score), isRecord: score > best && score > 0 };
+  }
 
   // --- Pantalla y orientación ---
   function layout() {
@@ -113,6 +148,15 @@
     releaseAll();
     hideMsg();
     modern.reset();
+    survival.time = SURVIVAL_START;
+    survival.frozen = 0;
+    survival.record = isSurvival() ? bestScore(BOARD_KEYS.survival) : 0;
+    survival.beaten = false;
+    if (isKnoid()) {
+      knoid.start(demo);
+      state = 'play';
+      return;
+    }
     serveDir = Math.random() < 0.5 ? -1 : 1;
     startServe();
   }
@@ -129,6 +173,7 @@
     demo = true;
     resetMatch();
     showScreen('menu');
+    updateMenu();
   }
 
   function startServe() {
@@ -156,19 +201,23 @@
       modern.onGoal(side, ball.y + BALL_SIZE / 2);
       powerups.onGoal();
     }
-    if (scorer.score >= WIN_SCORE) {
-      if (demo) {
-        left.score = right.score = 0; // la demo vuelve a empezar sin pantalla final
-      } else {
-        endGame(scorer);
-        return;
+    if (isSurvival()) {
+      survivalGoal(scorer);
+    } else {
+      if (scorer.score >= WIN_SCORE) {
+        if (demo) {
+          left.score = right.score = 0; // la demo vuelve a empezar sin pantalla final
+        } else {
+          endGame(scorer);
+          return;
+        }
+      }
+      if (modernOn()) {
+        showMsg('¡GOL!', 0.8);
+        powerups.checkComeback();
       }
     }
-    if (modernOn()) {
-      showMsg('¡GOL!', 0.8);
-      powerups.checkComeback();
-    }
-    if (mode === 'com' && !demo) {
+    if (vsCom() && !demo) {
       const newLevel = Math.floor((left.score + right.score) / GOALS_PER_LEVEL);
       if (newLevel !== level) {
         level = newLevel;
@@ -183,16 +232,55 @@
     startServe();
   }
 
+  // Supervivencia: cada gol de J1 suma tiempo; superar el récord se celebra en el momento
+  function survivalGoal(scorer) {
+    if (scorer !== left) {
+      showMsg('¡GOL DE COM!', 0.8);
+      return;
+    }
+    survival.time += SURVIVAL_BONUS;
+    showMsg(`¡GOL! +${SURVIVAL_BONUS} s`, 1);
+    if (!demo && !survival.beaten && survival.record > 0 && left.score > survival.record) {
+      survival.beaten = true;
+      showMsg('¡NUEVO RÉCORD!', 1.8);
+      modern.celebrate('left');
+      sfx().record();
+    }
+  }
+
   function endGame(winner) {
     state = 'over';
     centerBall();
     hideMsg();
-    $('winner').textContent = `¡GANA ${winner === left ? 'JUGADOR 1' : (mode === 'com' ? 'COM' : 'JUGADOR 2')}!`;
-    $('final').textContent = `${left.score} - ${right.score}`;
-    updateHud();
-    showScreen('over');
+    showResults({
+      title: `¡GANA ${winner === left ? 'JUGADOR 1' : (vsCom() ? 'COM' : 'JUGADOR 2')}!`,
+      final: `${left.score} - ${right.score}`,
+    });
     sfx().win();
     if (modernOn()) modern.onWin(sideOf(winner));
+  }
+
+  function survivalOver() {
+    state = 'over';
+    survival.time = 0;
+    centerBall();
+    hideMsg();
+    const result = saveScore(BOARD_KEYS.survival, left.score);
+    showResults({ title: '¡SE ACABÓ EL TIEMPO!', final: `${left.score} PUNTOS`, result });
+    if (result.isRecord) {
+      modern.celebrate('left');
+      sfx().record();
+    } else {
+      sfx().gameOver();
+    }
+  }
+
+  function knoidOver(score, reached) {
+    state = 'over';
+    hideMsg();
+    const result = saveScore(BOARD_KEYS.krostnoid, score);
+    showResults({ title: 'PERDISTE', final: `${score} PUNTOS · NIVEL ${reached}`, result });
+    sfx()[result.isRecord ? 'record' : 'gameOver']();
   }
 
   function pause() {
@@ -217,8 +305,20 @@
   // --- Actualización ---
   function update(dt) {
     if (msgTimer > 0 && (msgTimer -= dt) <= 0) nextMsg();
+    if (isKnoid()) {
+      if (state === 'play') knoid.update(dt);
+      return;
+    }
     if (modernOn() && state !== 'paused') modern.update(dt);
     if (state !== 'serve' && state !== 'play') return;
+
+    if (isSurvival() && !demo) {
+      if (survival.frozen > 0) survival.frozen = Math.max(0, survival.frozen - dt);
+      else if ((survival.time -= dt) <= 0) {
+        survivalOver();
+        return;
+      }
+    }
 
     movePaddles(dt);
     if (modernOn()) powerups.update(dt);
@@ -236,18 +336,18 @@
     }
   }
 
-  // Si se mantienen arriba y abajo a la vez, manda la última tecla pulsada
-  function axis(upCodes, downCodes) {
+  // Si se mantienen las dos direcciones a la vez, manda la última tecla pulsada
+  function axis(negCodes, posCodes) {
     const latest = (codes) => Math.max(0, ...codes.map((c) => keys.get(c) || 0));
-    const up = latest(upCodes), down = latest(downCodes);
-    return up === down ? 0 : (down > up ? 1 : -1);
+    const neg = latest(negCodes), pos = latest(posCodes);
+    return neg === pos ? 0 : (pos > neg ? 1 : -1);
   }
 
   function movePaddles(dt) {
     if (demo) {
       updateAI(left, dt);
       updateAI(right, dt);
-    } else if (mode === 'com') {
+    } else if (vsCom()) {
       drive(left, axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']), touch.left, dt);
       updateAI(right, dt);
     } else {
@@ -334,6 +434,13 @@
     else if (ball.x > W) goal(left);
   }
 
+  // Power-up Congelado: en Supervivencia, si lo consigue J1 también se detiene el reloj
+  function onFreeze(owner, seconds) {
+    if (!isSurvival() || owner !== 'left') return;
+    survival.frozen = seconds;
+    showMsg('¡TIEMPO CONGELADO!', 1.4);
+  }
+
   // --- Dibujo ---
   const snap = (v) => Math.round(v * SCALE) / SCALE;
 
@@ -365,9 +472,21 @@
     }
   }
 
-  // Posición (en pantalla) de cada marcador; la usan el dibujo y el confeti
+  // Posición (en pantalla) de cada marcador; la usan el dibujo y el confeti.
+  // En Supervivencia hay un único marcador (J1) y el reloj.
   function scoreBoxes() {
     const s = 4;
+    if (isSurvival()) {
+      const secs = Math.ceil(survival.time);
+      if (portrait) {
+        return { left: { x: 14, y: W / 2 - 6 - 5 * s, s }, right: null, timer: { x: 14, y: W / 2 + 6, s: 3 } };
+      }
+      return {
+        left: { x: W / 2 - numberWidth(left.score, s) / 2, y: 10, s },
+        right: null,
+        timer: { x: W / 2 - numberWidth(secs, 3) / 2, y: 36, s: 3 },
+      };
+    }
     if (portrait) {
       return { left: { x: 14, y: W / 2 + 16, s }, right: { x: 14, y: W / 2 - 16 - 5 * s, s } };
     }
@@ -398,11 +517,12 @@
   }
 
   function draw() {
-    if (modernOn()) modern.draw();
+    if (isKnoid()) knoid.draw();
+    else if (modernOn()) modern.draw();
     else drawClassic();
   }
 
-  const playerName = (side) => (side === 'left' ? 'J1' : (mode === 'com' ? 'COM' : 'J2'));
+  const playerName = (side) => (side === 'left' ? 'J1' : (vsCom() ? 'COM' : 'J2'));
 
   const powerups = window.PongPowerups({
     ctx, W, BALL_SIZE, PADDLE_H, BALL_SPEED, left, right, ball,
@@ -410,15 +530,25 @@
     get state() { return state; },
     fx: () => modern,
     sfx: () => sfx(),
-    rect, toScreenRect, playerName, showMsg,
+    rect, toScreenRect, playerName, showMsg, onFreeze,
   });
 
   const modern = window.PongModern({
     ctx, W, PADDLE_W, BALL_SIZE, BALL_MAX_SPEED, left, right, ball, powerups,
     get H() { return H; },
     get state() { return state; },
+    get survival() { return isSurvival() ? survival : null; },
     sfx: () => sfx(),
     rect, toScreenRect, drawNumber, numberWidth, scoreBoxes, screenSize, ballVisible,
+  });
+
+  const knoid = window.PongKrostnoid({
+    ctx, screenSize, snap, axis, showMsg,
+    sfx: () => sfx(),
+    touchX: () => touch.knoid,
+    record: () => bestScore(BOARD_KEYS.krostnoid),
+    setHud: (text) => { $('hud').textContent = text; },
+    onGameOver: knoidOver,
   });
 
   // --- Interfaz ---
@@ -427,13 +557,65 @@
     $('hud').classList.toggle('hidden', name === 'menu');
     $('btn-pause').classList.toggle('hidden', name !== 'game');
     $('quit-msg').classList.add('hidden');
-    screenEl.classList.toggle('modern', modernOn());
+    screenEl.classList.toggle('modern', game !== 'pong' || style === 'modern');
+    screenEl.classList.toggle('survival', isSurvival());
+    screenEl.classList.toggle('knoid', isKnoid());
+  }
+
+  // Pantalla final: título, puntos y, en los modos con récord, la tabla de mejores puntuaciones
+  function showResults({ title, final, result }) {
+    $('winner').textContent = title;
+    $('final').textContent = final;
+    const recordLine = $('record-line'), board = $('board');
+    recordLine.classList.toggle('hidden', !result);
+    board.classList.toggle('hidden', !result);
+    $('btn-again').textContent = result ? 'VOLVER A JUGAR' : 'JUEGO NUEVO';
+    if (result) {
+      recordLine.textContent = result.isRecord ? '¡NUEVO RÉCORD!' : `RÉCORD: ${result.best}`;
+      recordLine.classList.toggle('new-record', result.isRecord);
+      board.innerHTML = '';
+      board.classList.toggle('hidden', !result.board.length);
+      result.board.forEach((e, i) => {
+        const li = document.createElement('li');
+        li.textContent = `${i + 1}. ${e.score} PTS · ${e.date}`;
+        li.classList.toggle('mine', e.id === result.entry.id);
+        board.appendChild(li);
+      });
+    }
+    updateHud();
+    showScreen('over');
   }
 
   function updateHud() {
-    $('hud').textContent = mode === 'com'
-      ? `COM · NIVEL ${level + 1} · ${Math.round(difficulty() * 100)}%`
-      : `2 JUGADORES · A ${WIN_SCORE}`;
+    if (isKnoid()) return; // KrostNoid escribe su propio marcador
+    if (isSurvival()) {
+      $('hud').textContent = `SUPERVIVENCIA · NIVEL ${level + 1} · RÉCORD ${Math.max(survival.record, left.score)}`;
+    } else {
+      $('hud').textContent = mode === 'com'
+        ? `COM · NIVEL ${level + 1} · ${Math.round(difficulty() * 100)}%`
+        : `2 JUGADORES · A ${WIN_SCORE}`;
+    }
+  }
+
+  // Menú: filas visibles y texto de ayuda según el juego elegido
+  function updateMenu() {
+    document.querySelector('#menu h1').textContent = isKnoid() ? 'KROSTNOID' : 'PONG';
+    $('row-mode').classList.toggle('hidden', game !== 'pong');
+    $('row-style').classList.toggle('hidden', game !== 'pong');
+    const info = $('game-info');
+    if (isSurvival()) {
+      info.textContent = `${SURVIVAL_START} s · cada gol +${SURVIVAL_BONUS} s · RÉCORD: ${bestScore(BOARD_KEYS.survival)}`;
+    } else if (isKnoid()) {
+      info.textContent = `Rompe todos los ladrillos · RÉCORD: ${bestScore(BOARD_KEYS.krostnoid)}`;
+    }
+    info.classList.toggle('hidden', game === 'pong');
+    $('help-keys').textContent = isKnoid()
+      ? 'Teclado: ← / → mover · Espacio lanzar · P pausa · M sonido'
+      : 'Teclado: J1 W / S · J2 ↑ / ↓ · P pausa · M sonido';
+    $('help-touch').textContent = isKnoid()
+      ? 'Táctil: arrastra para mover · toca para lanzar'
+      : 'Táctil: arrastra el dedo en tu mitad de pantalla';
+    $('help-goal').classList.toggle('hidden', game !== 'pong');
   }
 
   // Los mensajes se muestran en cola para que uno no tape a otro (p. ej. NIVEL y AYUDA en el mismo gol)
@@ -466,16 +648,19 @@
     msgTimer = 0;
   }
 
-  // Botones de opción del menú (modo de juego y estilo visual)
+  // Botones de opción del menú (juego, jugadores y estilo visual)
   function select(group, value) {
-    if (group === 'mode') {
-      mode = value;
-    } else if (style !== value) {
-      style = value;
-      if (demo) resetMatch(); // la demo de fondo arranca de nuevo con el estilo elegido
-      screenEl.classList.toggle('modern', modernOn());
-    }
+    const current = { game, mode, style }[group];
+    if (group === 'game') game = value;
+    else if (group === 'mode') mode = value;
+    else style = value;
     document.querySelectorAll(`[data-${group}]`).forEach((b) => b.classList.toggle('selected', b.dataset[group] === value));
+    // La demo de fondo vuelve a empezar con lo elegido
+    if (demo && current !== value && group !== 'mode') {
+      resetMatch();
+      showScreen('menu');
+    }
+    updateMenu();
   }
 
   function quit() {
@@ -489,8 +674,9 @@
   }
 
   $('version').textContent = `VERSIÓN ${window.PONG_VERSION}`;
-  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => select('mode', b.dataset.mode)));
-  document.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', () => select('style', b.dataset.style)));
+  for (const group of ['game', 'mode', 'style']) {
+    document.querySelectorAll(`[data-${group}]`).forEach((b) => b.addEventListener('click', () => select(group, b.dataset[group])));
+  }
   $('btn-start').addEventListener('click', newGame);
   $('btn-quit').addEventListener('click', quit);
   $('btn-pause').addEventListener('click', pause);
@@ -513,7 +699,7 @@
 
   // --- Entrada: teclado ---
   window.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     if (!keys.has(e.code)) keys.set(e.code, ++pressSeq);
     if (e.repeat) return;
 
@@ -530,7 +716,8 @@
       else if (e.code === 'Enter') newGame();
       return;
     }
-    if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Space') togglePause();
+    if (isKnoid() && state === 'play' && ['Space', 'ArrowUp', 'KeyW'].includes(e.code)) knoid.launch();
+    else if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Space') togglePause();
     else if (e.code === 'KeyN' || (state === 'over' && e.code === 'Enter')) newGame();
   });
   window.addEventListener('keyup', (e) => {
@@ -542,7 +729,7 @@
   function releaseAll() {
     keys.clear();
     pointers.clear();
-    touch.left = touch.right = null;
+    touch.left = touch.right = touch.knoid = null;
   }
 
   window.addEventListener('blur', () => {
@@ -557,10 +744,11 @@
   });
 
   // --- Entrada: táctil / ratón ---
-  // Horizontal: mitad izquierda = J1, mitad derecha = J2. Vertical: mitad inferior = J1, superior = J2.
-  // Contra la COM, toda la pantalla controla a J1. La paleta sigue la posición del dedo.
+  // Pong horizontal: mitad izquierda = J1, mitad derecha = J2. Vertical: mitad inferior = J1, superior = J2.
+  // Contra la COM, toda la pantalla controla a J1. KrostNoid: la paleta sigue al dedo en horizontal.
   function readPointer(e) {
     const r = canvas.getBoundingClientRect();
+    if (isKnoid()) return { side: 'knoid', pos: (e.clientX - r.left) / r.width * screenSize().w };
     return portrait
       ? { side: e.clientY > r.top + r.height / 2 ? 'left' : 'right', pos: (e.clientX - r.left) / r.width * H }
       : { side: e.clientX < r.left + r.width / 2 ? 'left' : 'right', pos: (e.clientY - r.top) / r.height * H };
@@ -570,9 +758,10 @@
     if (demo || (state !== 'play' && state !== 'serve')) return;
     if (e.target.closest && e.target.closest('button')) return;
     const p = readPointer(e);
-    const side = mode === '2p' ? p.side : 'left';
+    const side = p.side === 'knoid' || (!vsCom() && game === 'pong') ? p.side : 'left';
     pointers.set(e.pointerId, side);
     touch[side] = p.pos;
+    if (side === 'knoid') knoid.launch();
     e.preventDefault();
   }
 
@@ -604,6 +793,11 @@
     update(dt);
     draw();
     requestAnimationFrame(frame);
+  }
+
+  // Solo para pruebas automáticas: index.html?debug expone el estado interno
+  if (/[?&]debug\b/.test(location.search)) {
+    window.__pong = { ball, left, right, survival, powerups, knoid, touch, get state() { return state; } };
   }
 
   layout();

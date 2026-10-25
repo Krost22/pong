@@ -126,7 +126,11 @@ window.PongPowerups = (api) => {
       case 'giant': me.giant = GIANT_TIME; me.mini = 0; break;
       case 'mini': rival.mini = MINI_TIME; rival.giant = 0; break;
       case 'shield': me.shield = SHIELD_TIME; break;
-      case 'freeze': rival.frozen = FREEZE_TIME; api.fx().startIce(); break;
+      case 'freeze':
+        rival.frozen = FREEZE_TIME;
+        api.fx().startIce();
+        api.onFreeze(owner, FREEZE_TIME);
+        break;
       case 'balloons': spawnBalloons(); break;
     }
     api.fx().burst(g.x + GIFT / 2, g.y + GIFT / 2, [...g.colors, '#ffffff'], 30, 110);

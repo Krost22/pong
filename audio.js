@@ -169,6 +169,39 @@ window.PongAudio = (() => {
         tone({ type: 'sine', f0: note(n + 12), dur: 0.4, vol: 0.05, at: 0.4 + at });
       });
     }),
+    // Nuevo récord: arpegio brillante que sube dos octavas
+    record: sound(() => {
+      [72, 76, 79, 84, 88, 91, 96].forEach((n, i) => {
+        tone({ type: 'square', f0: note(n), dur: 0.14, vol: 0.06, at: i * 0.07 });
+        tone({ type: 'triangle', f0: note(n - 12), dur: 0.2, vol: 0.12, at: i * 0.07 });
+      });
+      noise({ dur: 0.8, vol: 0.06, filter: 'highpass', f0: 6000, at: 0.45, attack: 0.1 });
+    }),
+    // Fin de partida: melodía que cae
+    gameOver: sound(() => {
+      [[67, 0], [63, 0.25], [60, 0.5], [55, 0.75]].forEach(([n, at]) => {
+        tone({ type: 'square', f0: note(n), dur: 0.3, vol: 0.08, at });
+        tone({ type: 'triangle', f0: note(n - 12), dur: 0.35, vol: 0.14, at });
+      });
+    }),
+    // KrostNoid: ladrillo roto (más agudo cuanto más arriba), metal, láser, vida perdida, nivel superado
+    brick: sound((row = 0) => {
+      tone({ type: 'square', f0: note(84 - row * 2), f1: note(76 - row * 2), dur: 0.07, vol: 0.07 });
+      noise({ dur: 0.04, vol: 0.08, filter: 'highpass', f0: 3000 });
+    }),
+    clink: sound(() => {
+      tone({ type: 'square', f0: 1500, dur: 0.05, vol: 0.05 });
+      tone({ type: 'sine', f0: 2300, dur: 0.12, vol: 0.05 });
+    }),
+    laser: sound(() => tone({ type: 'sawtooth', f0: 1600, f1: 500, dur: 0.08, vol: 0.04 })),
+    lifeLost: sound(() => {
+      tone({ type: 'triangle', f0: 600, f1: 90, dur: 0.6, vol: 0.2 });
+      noise({ dur: 0.3, vol: 0.12, filter: 'lowpass', f0: 800, f1: 100 });
+    }),
+    levelClear: sound(() => {
+      [72, 76, 79, 84].forEach((n, i) => tone({ type: 'square', f0: note(n), dur: 0.18, vol: 0.08, at: i * 0.1 }));
+      tone({ type: 'triangle', f0: note(84), dur: 0.6, vol: 0.14, at: 0.4 });
+    }),
     // Pequeña fanfarria
     win: sound(() => {
       const melody = [[67, 0, 0.15], [72, 0.15, 0.15], [76, 0.3, 0.15], [79, 0.45, 0.3], [76, 0.78, 0.15], [79, 0.93, 0.6]];

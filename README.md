@@ -31,6 +31,30 @@ En la línea central aparecen regalos al azar. El poder se lo lleva quien lanzó
 | Mini rival | La paleta del rival mide la mitad durante 8 s. |
 | Congelado | El rival no puede moverse durante 2 s y la cancha se vuelve de hielo durante 2 goles. |
 
+## Supervivencia
+
+Juegas tú (J1) contra la COM, con todo lo del modo moderno.
+
+- Empiezas con 60 segundos de reloj y cada gol tuyo suma 5 segundos más.
+- Un único marcador en el centro cuenta tus goles.
+- Si consigues el poder Congelado, el reloj también se detiene durante 2 segundos. Si lo consigue la COM, solo se congela tu paleta y el reloj sigue corriendo.
+- Cuando el reloj llega a 0 pierdes. La pantalla final muestra tus puntos, tu récord y la tabla de las 5 mejores partidas, que se guarda en el dispositivo.
+- Si superas tu récord, se celebra en el momento con confeti dorado y otra vez en la pantalla final.
+
+## KrostNoid
+
+Rompeladrillos al estilo Arkanoid, con 5 niveles. Al terminar el quinto vuelven a empezar, más rápidos y con ladrillos de plata más duros.
+
+- **Ladrillos:** los de color se rompen de un golpe, los de **plata** necesitan dos y los de **oro** son indestructibles.
+- **Cápsulas:** algunos ladrillos sueltan una cápsula al romperse:
+  - **E**xpandir: paleta más ancha.
+  - **M**ultibola: tres bolas.
+  - **L**áser: dispara solo durante 10 s.
+  - **S** (lento): la bola va más despacio.
+  - **V**ida extra.
+- **Controles:** arrastra el dedo o usa ← / → para mover la paleta. Toca la pantalla o pulsa Espacio para lanzar la bola.
+- Empiezas con 3 vidas. La tabla de récords se guarda aparte de la de Supervivencia.
+
 ## Versiones
 
 La versión actual está en `version.js`. El menú la muestra y la APK la usa como `versionName`.

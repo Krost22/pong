@@ -191,15 +191,22 @@ window.PongModern = (api) => {
     scorches.push({ x: gx, y: gy, life: 1 });
   }
 
-  function burstConfetti(side, n) {
+  function burstConfetti(side, n, colors = CONFETTI) {
     const box = api.scoreBoxes()[side];
+    if (!box) return; // en Supervivencia la COM no tiene marcador
     const score = side === 'left' ? left.score : right.score;
     const x = box.x + api.numberWidth(score, box.s) / 2;
     const y = box.y + box.s * 2.5;
     for (let i = 0; i < n; i++) {
       confetti.push({ x, y, vx: rand(-100, 100), vy: rand(-190, -40), life: rand(1.6, 2.8),
-        color: pick(CONFETTI), spin: rand(6, 14), phase: rand(0, 6) });
+        color: pick(colors), spin: rand(6, 14), phase: rand(0, 6) });
     }
+  }
+
+  // Nuevo récord: lluvia de confeti dorado y destello en toda la cancha
+  function celebrate(side) {
+    burstConfetti(side, 180, ['#ffd23f', '#fff3b0', '#ffffff', '#ffb42e']);
+    flashes.push({ concededLeft: true, t: 0, gold: true }, { concededLeft: false, t: 0, gold: true });
   }
 
   // Chispas en todas direcciones (coordenadas de campo); la usan los power-ups
@@ -419,7 +426,8 @@ window.PongModern = (api) => {
 
     for (const f of flashes) {
       const k = f.t / (FLASH_LIFE * (f.fire ? 2 : 1));
-      ctx.fillStyle = f.fire ? `rgba(255, 120, 30, ${0.5 * (1 - k)})` : `rgba(255, 255, 255, ${0.35 * (1 - k)})`;
+      const rgb = f.fire ? '255, 120, 30' : (f.gold ? '255, 210, 63' : '255, 255, 255');
+      ctx.fillStyle = `rgba(${rgb}, ${(f.fire ? 0.5 : 0.35) * (1 - k)})`;
       rect(f.concededLeft ? 0 : W / 2, 0, W / 2, H);
     }
 
@@ -531,6 +539,31 @@ window.PongModern = (api) => {
     rect(W - 3, 3, 2, H - 6);
   }
 
+  // Reloj de Supervivencia: blanco, rojo y parpadeando en los últimos 10 s, azul con escarcha si está congelado
+  function drawClock(box) {
+    const { time: t, frozen } = api.survival;
+    const secs = Math.ceil(t);
+    const w = api.numberWidth(secs, box.s);
+    let color = '#ffffff';
+    if (frozen > 0) color = '#9fe6ff';
+    else if (t <= 10) color = Math.floor(time * 4) % 2 ? '#ff5a4f' : '#ffb3ad';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    api.drawNumber(secs, box.x + 1, box.y + 1, box.s);
+    ctx.fillStyle = color;
+    api.drawNumber(secs, box.x, box.y, box.s);
+    // Icono de reloj a la izquierda
+    const ix = box.x - 9, iy = box.y + 3;
+    ctx.fillRect(ix + 1, iy, 4, 1);
+    ctx.fillRect(ix, iy + 1, 1, 4);
+    ctx.fillRect(ix + 5, iy + 1, 1, 4);
+    ctx.fillRect(ix + 1, iy + 5, 4, 1);
+    ctx.fillRect(ix + 3, iy + 2, 1, 2);
+    if (frozen > 0) {
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) ctx.fillRect(box.x + ((i * 7 + Math.floor(time * 3)) % (w + 1)), box.y + (i * 5) % (5 * box.s), 1, 1);
+    }
+  }
+
   function drawWaves() {
     const rect = api.rect, H = api.H;
     for (const w of waves) {
@@ -584,15 +617,17 @@ window.PongModern = (api) => {
     drawWaves();
     powerups.drawUnder();
 
-    // Marcador con sombra, del color de cada jugador
+    // Marcador con sombra, del color de cada jugador (en Supervivencia: solo J1 y el reloj)
     const boxes = api.scoreBoxes();
     for (const [side, p, colors] of [['left', left, C.p1], ['right', right, C.p2]]) {
       const b = boxes[side];
+      if (!b) continue;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
       api.drawNumber(p.score, b.x + 1, b.y + 1, b.s);
       ctx.fillStyle = colors[1];
       api.drawNumber(p.score, b.x, b.y, b.s);
     }
+    if (api.survival) drawClock(boxes.timer);
 
     drawPaddle(left, C.p1, paddleFlash.left);
     drawPaddle(right, C.p2, paddleFlash.right);
@@ -648,7 +683,7 @@ window.PongModern = (api) => {
   }
 
   return {
-    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce,
+    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce, celebrate,
     shake: addShake,
     get iceActive() { return ice.on; },
   };

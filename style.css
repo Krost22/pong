@@ -99,6 +99,15 @@ button.corner {
   transform: translateY(-50%);
 }
 
+/* En Supervivencia (horizontal) el centro lo ocupa el marcador y en KrostNoid los ladrillos: pausa arriba a la derecha */
+#screen.knoid button.corner,
+#screen.survival:not(.portrait) button.corner {
+  top: 6px;
+  left: auto;
+  right: 6px;
+  transform: none;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
@@ -141,14 +150,14 @@ button.corner {
   text-shadow: 4px 4px 0 #ff5a4f, 8px 8px 0 #1d5fa8;
 }
 
-#screen.modern #menu button {
+#screen.modern .overlay button {
   border-color: #7ee05a;
   background: rgba(10, 40, 10, 0.7);
   color: #e8ffe0;
 }
 
-#screen.modern #menu button:hover,
-#screen.modern #menu button:focus-visible {
+#screen.modern .overlay button:hover,
+#screen.modern .overlay button:focus-visible {
   background: #7ee05a;
   color: #0d2b0d;
 }
@@ -206,6 +215,45 @@ h2 {
   font-size: clamp(9px, 1.5vmax, 14px);
   line-height: 1.7;
   opacity: 0.75;
+}
+
+.info {
+  font-size: clamp(10px, 1.7vmax, 15px);
+  letter-spacing: 1px;
+  color: #ffd23f;
+}
+
+/* Resultados: récord y tabla de mejores puntuaciones */
+#record-line {
+  font-size: clamp(14px, 2.6vmax, 22px);
+  letter-spacing: 3px;
+  color: #ffd23f;
+}
+
+#record-line.new-record {
+  font-size: clamp(18px, 3.6vmax, 30px);
+  animation: record 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes record {
+  from { color: #ffd23f; text-shadow: 0 0 6px #ffd23f, 3px 3px 0 #ff5a4f; transform: scale(1); }
+  to { color: #ffffff; text-shadow: 0 0 18px #ffd23f, 3px 3px 0 #3fa7ff; transform: scale(1.12); }
+}
+
+#board {
+  list-style: none;
+  font-size: clamp(10px, 1.6vmax, 14px);
+  line-height: 1.6;
+  letter-spacing: 1px;
+  opacity: 0.9;
+}
+
+#board li.mine {
+  color: #ffd23f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #record-line.new-record { animation: none; }
 }
 
 .credit {
