@@ -151,6 +151,12 @@ h2 {
   opacity: 0.75;
 }
 
+.credit {
+  margin-top: clamp(4px, 2vmin, 16px);
+  font-size: clamp(10px, 1.6vmax, 15px);
+  letter-spacing: 3px;
+}
+
 #msg {
   position: absolute;
   left: 50%;
