@@ -1,3 +1,6 @@
+<img width="1920" height="1080" alt="01-poster" src="https://github.com/user-attachments/assets/2c13f4db-8cd1-4517-a979-a9b9f569dfbd" />
+
+
 # PONG
 
 Pong clásico en blanco y negro pixelado, hecho solo con HTML, CSS y JavaScript.
