@@ -74,7 +74,7 @@ window.PongPowerups = (api) => {
     slowBall = false;
     slowSaved = 0;
     for (const p of [left, right]) {
-      p.h = PADDLE_H;
+      p.h = PADDLE_H * Math.min(p.sizeMult || 1, MAX_SIZE_MULT);
       p.giant = p.mini = p.frozen = p.shield = 0;
       p.boost = false;
     }
@@ -140,13 +140,15 @@ window.PongPowerups = (api) => {
     sfx()[typeSound[type.id]]();
   }
 
-  function spawnGhosts() {
+  // Bolas fantasma que salen de la pelota con otro ángulo; fire = fantasmas de fuego (del Dragón)
+  function spawnGhosts(count = 2, fire = false) {
     const speed = Math.max(Math.hypot(ball.vx, ball.vy), BALL_SPEED);
     const sign = Math.sign(ball.vx) || 1;
     const base = Math.atan2(ball.vy, Math.abs(ball.vx));
-    for (const d of [-0.5, 0.5]) {
+    const offsets = count === 1 ? [pick([-0.5, 0.5])] : [-0.5, 0.5];
+    for (const d of offsets) {
       const a = clamp(base + d, -1.05, 1.05);
-      ghosts.push({ x: ball.x, y: ball.y, vx: Math.cos(a) * speed * sign, vy: Math.sin(a) * speed, t: rand(0, 6), trail: [] });
+      ghosts.push({ x: ball.x, y: ball.y, vx: Math.cos(a) * speed * sign, vy: Math.sin(a) * speed, t: rand(0, 6), trail: [], fire });
     }
   }
 
@@ -259,7 +261,8 @@ window.PongPowerups = (api) => {
       p.mini = Math.max(0, p.mini - dt);
       p.frozen = Math.max(0, p.frozen - dt);
       p.shield = Math.max(0, p.shield - dt);
-      const mult = (p.giant > 0 ? 2 : 1) * (p.mini > 0 ? 0.5 : 1) * (p.boost ? COMEBACK_BOOST : 1);
+      // sizeMult = tamaño base (cartas y rivales del RogueLike); el resto, power-ups y ayuda
+      const mult = (p.sizeMult || 1) * (p.giant > 0 ? 2 : 1) * (p.mini > 0 ? 0.5 : 1) * (p.boost ? COMEBACK_BOOST : 1);
       const target = PADDLE_H * Math.min(mult, MAX_SIZE_MULT);
       if (p.h !== target) {
         const old = p.h;
@@ -270,7 +273,7 @@ window.PongPowerups = (api) => {
 
     if (api.state === 'play') {
       if ((spawnTimer -= dt) <= 0) {
-        spawnTimer = rand(SPAWN_MIN, SPAWN_MAX);
+        spawnTimer = rand(SPAWN_MIN, SPAWN_MAX) / (api.giftRate ? api.giftRate() : 1);
         if (gifts.length < MAX_GIFTS) spawnGift();
       }
 
@@ -398,23 +401,27 @@ window.PongPowerups = (api) => {
   function drawGhosts() {
     const rect = api.rect, ctx = api.ctx;
     for (const g of ghosts) {
+      // [estela (rgb), aura, cuerpo, sombra, brillo]: azul normal o naranja si es de fuego
+      const [trail, aura, body, shade, shine] = g.fire
+        ? ['255, 140, 50', '#ffc78a', '#ff8a2a', '#b84a12', '#fff0d0']
+        : ['95, 184, 255', '#9fd4ff', '#4da6ff', '#1d5fa8', '#e6f4ff'];
       g.trail.forEach((p, i) => {
-        ctx.fillStyle = `rgba(95, 184, 255, ${(i + 1) / g.trail.length * 0.5})`;
+        ctx.fillStyle = `rgba(${trail}, ${(i + 1) / g.trail.length * 0.5})`;
         rect(p.x + 1, p.y + 1, 2, 2);
       });
       const flicker = 0.75 + 0.25 * Math.sin(g.t * 14);
       ctx.globalAlpha = 0.35 * flicker;
-      ctx.fillStyle = '#9fd4ff';
+      ctx.fillStyle = aura;
       rect(g.x - 1, g.y, BALL_SIZE + 2, BALL_SIZE);
       rect(g.x, g.y - 1, BALL_SIZE, BALL_SIZE + 2);
       ctx.globalAlpha = flicker;
-      ctx.fillStyle = '#4da6ff';
+      ctx.fillStyle = body;
       rect(g.x + 1, g.y, 2, 4);
       rect(g.x, g.y + 1, 4, 2);
-      ctx.fillStyle = '#1d5fa8';
+      ctx.fillStyle = shade;
       rect(g.x + 3, g.y + 2, 1, 1);
       rect(g.x + 2, g.y + 3, 1, 1);
-      ctx.fillStyle = '#e6f4ff';
+      ctx.fillStyle = shine;
       rect(g.x + 1, g.y + 1, 1, 1);
     }
     ctx.globalAlpha = 1;
@@ -422,6 +429,7 @@ window.PongPowerups = (api) => {
 
   return {
     reset, update, collide, checkShield, adjustHitSpeed, onGoal, checkComeback, drawUnder, drawGhosts,
+    spawnGhosts, spawnBalloons,
     get ghosts() { return ghosts; },
     get gifts() { return gifts; },
     get balloons() { return balloons; },

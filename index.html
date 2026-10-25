@@ -20,6 +20,7 @@
         <button class="selected" data-game="pong">PONG</button>
         <button data-game="survival">SUPERVIVENCIA</button>
         <button data-game="krostnoid">KROSTNOID</button>
+        <button data-game="roguelike">ROGUELIKE</button>
       </div>
       <div id="row-mode" class="modes">
         <button class="selected" data-mode="com">1 JUGADOR vs COM</button>
@@ -31,6 +32,7 @@
       </div>
       <p id="game-info" class="info hidden"></p>
       <div class="modes">
+        <button id="btn-continue" class="big hidden">CONTINUAR</button>
         <button id="btn-start" class="big">INICIO</button>
         <button id="btn-quit" class="big">SALIR</button>
       </div>
@@ -51,6 +53,16 @@
       <button id="btn-exit">SALIR</button>
     </section>
 
+    <!-- RogueLike: mapa, cartas, tienda y descanso (lo rellena roguelike.js) -->
+    <section id="rogue" class="overlay translucent hidden">
+      <h2 id="rogue-title"></h2>
+      <p id="rogue-sub" class="info"></p>
+      <div id="rogue-map" class="rogue-map hidden"></div>
+      <div id="rogue-items" class="cards"></div>
+      <p id="rogue-note" class="help"></p>
+      <div id="rogue-actions" class="modes"></div>
+    </section>
+
     <section id="over" class="overlay translucent hidden">
       <h2 id="winner"></h2>
       <p id="final"></p>
@@ -67,6 +79,7 @@
   <script src="powerups.js"></script>
   <script src="modern.js"></script>
   <script src="krostnoid.js"></script>
+  <script src="roguelike.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

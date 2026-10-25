@@ -202,6 +202,26 @@ window.PongAudio = (() => {
       [72, 76, 79, 84].forEach((n, i) => tone({ type: 'square', f0: note(n), dur: 0.18, vol: 0.08, at: i * 0.1 }));
       tone({ type: 'triangle', f0: note(84), dur: 0.6, vol: 0.14, at: 0.4 });
     }),
+    // RogueLike: moneda, carta elegida, puerta, corazón perdido, curación y rugido de jefe
+    coin: sound(() => {
+      tone({ type: 'square', f0: note(88), dur: 0.06, vol: 0.05 });
+      tone({ type: 'square', f0: note(95), dur: 0.12, vol: 0.05, at: 0.06 });
+    }),
+    card: sound(() => {
+      [79, 84, 91].forEach((n, i) => tone({ type: 'triangle', f0: note(n), dur: 0.16, vol: 0.12, at: i * 0.05 }));
+    }),
+    door: sound(() => {
+      noise({ dur: 0.4, vol: 0.12, filter: 'lowpass', f0: 400, f1: 1500, q: 2 });
+      tone({ type: 'sine', f0: 110, f1: 70, dur: 0.4, vol: 0.2 });
+    }),
+    heartLost: sound(() => tone({ type: 'square', f0: 330, f1: 110, dur: 0.35, vol: 0.09, at: 0.15 })),
+    heal: sound(() => {
+      [72, 79, 84].forEach((n, i) => tone({ type: 'sine', f0: note(n), dur: 0.3, vol: 0.12, at: i * 0.08 }));
+    }),
+    roar: sound(() => {
+      noise({ dur: 1.2, vol: 0.3, filter: 'bandpass', f0: 300, f1: 120, q: 1.5, attack: 0.1 });
+      tone({ type: 'sawtooth', f0: 70, f1: 45, dur: 1.2, vol: 0.12, attack: 0.1 });
+    }),
     // Pequeña fanfarria
     win: sound(() => {
       const melody = [[67, 0, 0.15], [72, 0.15, 0.15], [76, 0.3, 0.15], [79, 0.45, 0.3], [76, 0.78, 0.15], [79, 0.93, 0.6]];

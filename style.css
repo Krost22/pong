@@ -99,9 +99,10 @@ button.corner {
   transform: translateY(-50%);
 }
 
-/* En Supervivencia (horizontal) el centro lo ocupa el marcador y en KrostNoid los ladrillos: pausa arriba a la derecha */
+/* En Supervivencia y RogueLike (horizontal) el centro lo ocupa el marcador y en KrostNoid los ladrillos: pausa arriba a la derecha */
 #screen.knoid button.corner,
-#screen.survival:not(.portrait) button.corner {
+#screen.survival:not(.portrait) button.corner,
+#screen.rogue:not(.portrait) button.corner {
   top: 6px;
   left: auto;
   right: 6px;
@@ -291,6 +292,133 @@ h2 {
   color: #ffd23f;
 }
 
+/* --- RogueLike: mapa, puertas y cartas --- */
+.rogue-map {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rogue-map .node {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.rogue-map .node.done {
+  background: #7ee05a;
+  border-color: #7ee05a;
+  color: #0d2b0d;
+}
+
+.rogue-map .node.current {
+  border-color: #ffd23f;
+  box-shadow: 0 0 8px #ffd23f;
+}
+
+.rogue-map .node.boss {
+  border-color: #ff5a4f;
+  color: #ff5a4f;
+}
+
+.cards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Cartas y puertas (doble id para ganar al estilo general de botones del modo moderno) */
+#screen #rogue button.card,
+#screen #rogue button.door {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: clamp(118px, 23vmax, 190px);
+  min-width: 0;
+  padding: 10px 8px;
+  white-space: normal;
+  letter-spacing: 1px;
+  font-size: clamp(10px, 1.5vmax, 14px);
+  color: #fff;
+  background: rgba(8, 18, 28, 0.88);
+  border: 3px solid #c8d0d8;
+  transition: transform 0.1s;
+}
+
+#screen #rogue button.card:hover:not(:disabled),
+#screen #rogue button.door:hover,
+#screen #rogue button.card:focus-visible,
+#screen #rogue button.door:focus-visible {
+  transform: translateY(-3px);
+  background: rgba(30, 50, 70, 0.95);
+  color: #fff;
+}
+
+#screen #rogue button.card:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#rogue .card .rarity,
+#rogue .door .desc {
+  font-size: 0.75em;
+  opacity: 0.8;
+}
+
+#rogue .card .name,
+#rogue .door .name {
+  font-size: 1.15em;
+}
+
+#rogue .card .desc {
+  font-size: 0.8em;
+  line-height: 1.35;
+  font-weight: normal;
+  opacity: 0.9;
+}
+
+#rogue .card .price {
+  color: #ffd23f;
+}
+
+#screen #rogue button.card.rare {
+  border-color: #3fa7ff;
+  box-shadow: 0 0 10px rgba(63, 167, 255, 0.5);
+}
+
+#screen #rogue button.card.legendary {
+  border-color: #ffd23f;
+  animation: legendary 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes legendary {
+  from { box-shadow: 0 0 6px rgba(255, 210, 63, 0.5); }
+  to { box-shadow: 0 0 18px rgba(255, 210, 63, 0.9); }
+}
+
+#rogue .card.rare .rarity { color: #9fd4ff; }
+#rogue .card.legendary .rarity { color: #ffd23f; }
+
+#screen #rogue button.door.combat { border-color: #7ee05a; }
+#screen #rogue button.door.elite { border-color: #b07cff; box-shadow: 0 0 10px rgba(176, 124, 255, 0.5); }
+#screen #rogue button.door.shop { border-color: #ffd23f; }
+#screen #rogue button.door.rest { border-color: #3fa7ff; }
+#screen #rogue button.door.boss { border-color: #ff5a4f; box-shadow: 0 0 14px rgba(255, 90, 79, 0.7); }
+
+#rogue-note {
+  max-width: 90%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #screen #rogue button.card.legendary { animation: none; }
+}
+
 /* Pantallas bajas (móvil en horizontal): menú más compacto */
 @media (max-height: 460px) {
   .overlay { gap: 5px; padding: 8px; }
@@ -299,6 +427,8 @@ h2 {
   button.big { padding: 5px 24px; font-size: 18px; }
   .help { line-height: 1.35; font-size: 9px; }
   .credit { margin-top: 0; }
+  #screen #rogue button.card,
+  #screen #rogue button.door { padding: 6px; gap: 2px; }
 }
 
 .hidden {

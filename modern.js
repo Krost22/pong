@@ -25,6 +25,13 @@ window.PongModern = (api) => {
     red: '#e04848', blue: '#3a6fd8', crease: 'rgba(110, 170, 255, 0.45)', boards: '#ffffff',
     shadow: 'rgba(40, 80, 110, 0.3)', trail: '200, 230, 255',
   };
+  // Cancha de volcán (piso 3 del RogueLike)
+  const LAVA = {
+    border: '#1a100d', rockA: '#2b1f1c', rockB: '#33241f', speck: '#45322b', dark: '#1c1412',
+    glow: '255, 90, 30', core: '#ff7a1f', hot: '#ffd23f', lines: 'rgba(255, 190, 140, 0.35)',
+    shadow: 'rgba(0, 0, 0, 0.45)', trail: '255, 200, 150',
+    embers: ['#ffb42e', '#ff5a1f', '#ffd23f'],
+  };
   // Pelota según su estado: [cuerpo, sombra, brillo]
   const BALL_LOOK = {
     normal: ['#fff8dc', '#d6c48a', '#ffffff'],
@@ -32,7 +39,8 @@ window.PongModern = (api) => {
     slow: ['#b8f0ff', '#4aa8d8', '#ffffff'],
     puck: ['#2a2d34', '#111317', '#7a8090'], // sobre el hielo la pelota es un disco de hockey
   };
-  const FIRE_SPEED = 215; // a partir de esta velocidad la pelota arde
+  const FIRE_SPEED = 215; // a partir de esta velocidad la pelota arde (el RogueLike puede bajarlo)
+  const fireSpeed = () => (api.fireSpeed && api.fireSpeed()) || FIRE_SPEED;
   const CONFETTI = ['#ff5a4f', '#ffd23f', '#3fa7ff', '#7ee05a', '#ff8fd8', '#ffffff', '#b07cff'];
 
   // Resorte blando: la hierba tarda ~1 s en volver a su sitio tras pasar la pelota
@@ -46,7 +54,7 @@ window.PongModern = (api) => {
   const ICE_GOALS = 2, ICE_TRANSITION = 1.6; // la pista de hielo dura 2 goles
 
   let blades = [], cols = 0, rows = 0, fieldH = 0;
-  let circle = [], faceoffCircle = [], iceMarks = [];
+  let circle = [], faceoffCircle = [], iceMarks = [], lavaCracks = [];
   const sparks = [];   // coordenadas de campo
   const confetti = []; // coordenadas de pantalla: la gravedad siempre cae hacia abajo, gire o no el móvil
   const waves = [];
@@ -55,7 +63,9 @@ window.PongModern = (api) => {
   const skates = [];   // marcas de la pelota sobre el hielo
   const scorches = []; // manchas de quemado
   const paddleFlash = { left: 0, right: 0 };
-  const ice = { on: false, t: 0, goalsLeft: 0 }; // t: 0 = césped, 1 = hielo
+  // t: 0 = césped, 1 = hielo; permanent = cancha de hielo fija (piso 2 del RogueLike)
+  const ice = { on: false, t: 0, goalsLeft: 0, permanent: false };
+  let theme = 'grass'; // grass | lava (el hielo va encima de cualquiera de los dos)
   let shake = 0, shakePower = 1, time = 0;
   let burning = false;
 
@@ -106,6 +116,24 @@ window.PongModern = (api) => {
     for (let i = 0; i < 160; i++) {
       iceMarks.push({ x: Math.floor(rand(3, W - 8)), y: Math.floor(rand(3, H - 3)), w: Math.floor(rand(2, 7)), sparkle: Math.random() < 0.25, phase: rand(0, 6) });
     }
+    // Grietas de lava: caminos aleatorios que se tuercen poco a poco
+    lavaCracks = [];
+    for (let i = 0; i < 16; i++) {
+      let x = rand(6, W - 6), y = rand(6, H - 6), dir = rand(0, Math.PI * 2);
+      const seen = new Set(), points = [];
+      for (let step = 0, len = Math.floor(rand(10, 26)); step < len; step++) {
+        x += Math.cos(dir) * 1.5;
+        y += Math.sin(dir) * 1.5;
+        dir += rand(-0.5, 0.5);
+        if (x < 4 || x > W - 4 || y < 4 || y > H - 4) break;
+        const key = `${Math.round(x)},${Math.round(y)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          points.push([Math.round(x), Math.round(y)]);
+        }
+      }
+      if (points.length) lavaCracks.push({ points, phase: rand(0, 6) });
+    }
   }
 
   function ensureField() {
@@ -121,7 +149,18 @@ window.PongModern = (api) => {
     ice.on = false;
     ice.t = 0;
     ice.goalsLeft = 0;
+    ice.permanent = false;
+    theme = 'grass';
     for (const b of blades) b.bx = b.by = b.vx = b.vy = b.press = b.burn = 0;
+  }
+
+  // Cancha del piso del RogueLike: 'grass', 'ice' (hielo fijo) o 'lava'. instant = sin animar el hielo.
+  function setTheme(name, instant = false) {
+    theme = name === 'lava' ? 'lava' : 'grass';
+    ice.permanent = name === 'ice';
+    ice.on = ice.permanent;
+    ice.goalsLeft = 0;
+    if (instant) ice.t = ice.on ? 1 : 0;
   }
 
   // --- Eventos del juego ---
@@ -167,10 +206,11 @@ window.PongModern = (api) => {
       shakePower = 1;
     }
     burning = false;
-    if (ice.on && --ice.goalsLeft <= 0) {
+    if (ice.on && !ice.permanent && --ice.goalsLeft <= 0) {
       ice.on = false; // vuelve el césped
       sfx().thaw();
     }
+    return fiery;
   }
 
   function onWin(side) {
@@ -178,6 +218,7 @@ window.PongModern = (api) => {
   }
 
   function startIce() {
+    if (ice.permanent) return; // ya es una pista de hielo
     ice.on = true;
     ice.goalsLeft = ICE_GOALS;
   }
@@ -225,14 +266,15 @@ window.PongModern = (api) => {
   // Fuego: llamas que salen de la pelota hacia atrás y se apagan en humo
   function emitFire(dt) {
     const speed = Math.hypot(ball.vx, ball.vy);
-    const hot = api.state === 'play' && speed >= FIRE_SPEED && !powerups.slowBall;
+    const threshold = fireSpeed();
+    const hot = api.state === 'play' && speed >= threshold && !powerups.slowBall;
     if (hot && !burning) {
       sfx().ignite();
       burst(ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2, ['#ffe066', '#ff6a1f'], 14, 70);
     }
     if (api.state === 'play') burning = hot; // al marcar se conserva para el gol de fuego
     if (!hot) return;
-    const intensity = clamp((speed - FIRE_SPEED) / (BALL_MAX_SPEED - FIRE_SPEED), 0, 1);
+    const intensity = clamp((speed - threshold) / (BALL_MAX_SPEED - threshold), 0, 1);
     const n = Math.round((90 + 160 * intensity) * dt) + 1;
     for (let i = 0; i < n; i++) {
       sparks.push({ x: ball.x + rand(0, BALL_SIZE), y: ball.y + rand(0, BALL_SIZE),
@@ -287,6 +329,12 @@ window.PongModern = (api) => {
       trail.shift();
     }
     emitFire(dt);
+
+    // Volcán: brasas que saltan de las grietas
+    if (theme === 'lava' && ice.t < 1 && lavaCracks.length && Math.random() < 8 * dt) {
+      const [x, y] = pick(pick(lavaCracks).points);
+      sparks.push({ x, y, vx: rand(-12, 12), vy: rand(-12, 12), life: rand(0.6, 1.2), max: 1.2, color: pick(LAVA.embers) });
+    }
 
     for (let k = waves.length - 1; k >= 0; k--) {
       const w = waves[k];
@@ -377,7 +425,7 @@ window.PongModern = (api) => {
     if (p.frozen > 0) colors = C.ice;
     const [light, base, dark] = flash > 0 ? ['#ffffff', '#ffffff', colors[0]] : colors;
     if (!p.boost) {
-      ctx.fillStyle = ice.t > 0.5 ? RINK.shadow : C.shadow;
+      ctx.fillStyle = groundShadow();
       rect(p.x + 2, p.y + 2, PADDLE_W, h);
     }
     ctx.fillStyle = base;
@@ -464,9 +512,14 @@ window.PongModern = (api) => {
       }
     }
 
-    // Líneas de cal
+    drawCourtLines(C.chalk);
+  }
+
+  // Líneas de la cancha (cal en el césped, marcas tenues en el volcán)
+  function drawCourtLines(color) {
+    const rect = api.rect, H = api.H;
     const cx = Math.floor(W / 2), cy = Math.round(H / 2), box = 34;
-    ctx.fillStyle = C.chalk;
+    ctx.fillStyle = color;
     rect(2, 2, W - 4, 1);
     rect(2, H - 3, W - 4, 1);
     rect(2, 3, 1, H - 6);
@@ -564,6 +617,47 @@ window.PongModern = (api) => {
     }
   }
 
+  // Corazón de 7x6 píxeles
+  const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
+
+  function drawHeart(x, y, full) {
+    ctx.fillStyle = full ? '#ff4d5e' : 'rgba(60, 20, 28, 0.75)';
+    HEART.forEach((row, j) => {
+      for (let i = 0; i < 7; i++) if (row[i] === '1') ctx.fillRect(x + i, y + j, 1, 1);
+    });
+    if (full) {
+      ctx.fillStyle = '#ffd6dc';
+      ctx.fillRect(x + 1, y + 1, 1, 1);
+    }
+  }
+
+  // RogueLike: corazones, goles de la sala (pips) y barra de vida del jefe
+  function drawRogueHud(boxes, info) {
+    for (let i = 0; i < info.maxHearts; i++) drawHeart(boxes.hearts.x + i * 8, boxes.hearts.y, i < info.hearts);
+
+    for (let i = 0; i < info.target; i++) {
+      const x = boxes.pips.x + i * 6, y = boxes.pips.y;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(x + 1, y + 1, 4, 4);
+      ctx.fillStyle = i < info.goals ? '#ffd23f' : 'rgba(255, 255, 255, 0.35)';
+      ctx.fillRect(x, y, 4, 4);
+    }
+
+    if (info.boss) {
+      const { x, y, w } = boxes.boss;
+      const fillW = Math.round(w * info.boss.left / info.boss.max);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(x - 1, y - 1, w + 2, 6);
+      const blink = info.boss.rage && Math.floor(time * 6) % 2;
+      ctx.fillStyle = info.boss.rage ? (blink ? '#ff5a4f' : '#ffb42e') : '#b07cff';
+      ctx.fillRect(x, y, fillW, 4);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillRect(x, y, fillW, 1);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'; // separadores: un tramo por golpe de vida
+      for (let i = 1; i < info.boss.max; i++) ctx.fillRect(x + Math.round(w * i / info.boss.max), y, 1, 4);
+    }
+  }
+
   function drawWaves() {
     const rect = api.rect, H = api.H;
     for (const w of waves) {
@@ -584,9 +678,41 @@ window.PongModern = (api) => {
     }
   }
 
-  // Fondo: césped, hielo, o la transición entre ambos (el hielo se expande desde el centro)
+  // Volcán: roca oscura con grietas de lava que laten
+  function drawLava() {
+    const rect = api.rect, H = api.H;
+    for (let x = 0, k = 0; x < W; x += 20, k++) {
+      ctx.fillStyle = k % 2 ? LAVA.rockB : LAVA.rockA;
+      rect(x, 0, Math.min(20, W - x), H);
+    }
+    for (const m of iceMarks) {
+      if (m.y >= H) continue;
+      ctx.fillStyle = m.sparkle ? LAVA.dark : LAVA.speck;
+      rect(m.x, m.y, Math.min(m.w, 3), 1);
+    }
+    for (const c of lavaCracks) {
+      const glow = 0.55 + 0.45 * Math.sin(time * 2 + c.phase);
+      ctx.fillStyle = `rgba(${LAVA.glow}, ${0.22 * glow})`;
+      for (const [x, y] of c.points) if (y < H) rect(x - 1, y - 1, 3, 3);
+      ctx.fillStyle = glow > 0.75 ? LAVA.hot : LAVA.core;
+      for (const [x, y] of c.points) if (y < H) rect(x, y, 1, 1);
+    }
+    for (const f of flashes) {
+      const k = f.t / (FLASH_LIFE * (f.fire ? 2 : 1));
+      ctx.fillStyle = `rgba(255, ${f.gold ? 210 : 120}, 40, ${0.4 * (1 - k)})`;
+      rect(f.concededLeft ? 0 : W / 2, 0, W / 2, H);
+    }
+    drawCourtLines(LAVA.lines);
+  }
+
+  const groundShadow = () => (ice.t > 0.5 ? RINK.shadow : (theme === 'lava' ? LAVA.shadow : C.shadow));
+
+  // Fondo: césped o volcán, hielo, o la transición (el hielo se expande desde el centro)
   function drawGround(sw, sh) {
-    if (ice.t < 1) drawField();
+    if (ice.t < 1) {
+      if (theme === 'lava') drawLava();
+      else drawField();
+    }
     if (ice.t <= 0) return;
     ctx.save();
     if (ice.t < 1) {
@@ -604,7 +730,7 @@ window.PongModern = (api) => {
     const rect = api.rect;
     const onIce = ice.t > 0.5;
 
-    ctx.fillStyle = onIce ? RINK.border : C.border;
+    ctx.fillStyle = onIce ? RINK.border : (theme === 'lava' ? LAVA.border : C.border);
     ctx.fillRect(0, 0, sw, sh);
 
     ctx.save();
@@ -628,11 +754,12 @@ window.PongModern = (api) => {
       api.drawNumber(p.score, b.x, b.y, b.s);
     }
     if (api.survival) drawClock(boxes.timer);
+    if (api.rogue) drawRogueHud(boxes, api.rogue);
 
     drawPaddle(left, C.p1, paddleFlash.left);
     drawPaddle(right, C.p2, paddleFlash.right);
 
-    const trailColor = onIce ? RINK.trail : C.trail;
+    const trailColor = onIce ? RINK.trail : (theme === 'lava' ? LAVA.trail : C.trail);
     for (let i = 0; i < trail.length; i++) {
       ctx.fillStyle = `rgba(${trailColor}, ${(i + 1) / trail.length * 0.45})`;
       rect(trail[i].x + 1, trail[i].y + 1, 2, 2);
@@ -651,7 +778,7 @@ window.PongModern = (api) => {
     if (api.ballVisible()) {
       const look = burning ? 'fire' : (powerups.slowBall ? 'slow' : (onIce ? 'puck' : 'normal'));
       const [body, shade, shine] = BALL_LOOK[look];
-      ctx.fillStyle = onIce ? RINK.shadow : C.shadow;
+      ctx.fillStyle = groundShadow();
       rect(ball.x + 2, ball.y + 2, BALL_SIZE, BALL_SIZE);
       ctx.fillStyle = body;
       rect(ball.x + 1, ball.y, 2, 4);
@@ -683,7 +810,7 @@ window.PongModern = (api) => {
   }
 
   return {
-    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce, celebrate,
+    reset, update, draw, onHit, onWall, onGoal, onWin, burst, startIce, celebrate, setTheme,
     shake: addShake,
     get iceActive() { return ice.on; },
   };

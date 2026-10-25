@@ -55,6 +55,29 @@ Rompeladrillos al estilo Arkanoid, con 5 niveles. Al terminar el quinto vuelven 
 - **Controles:** arrastra el dedo o usa ← / → para mover la paleta. Toca la pantalla o pulsa Espacio para lanzar la bola.
 - Empiezas con 3 vidas. La tabla de récords se guarda aparte de la de Supervivencia.
 
+## RogueLike (Rogue Pong)
+
+Una *run* de Pong moderno contra la COM, en 3 pisos de 4 salas: **Césped**, **Hielo** (pista de hockey) y **Volcán** (lava). Las 3 primeras salas de cada piso las eliges entre 2 puertas; la cuarta es siempre el **jefe**.
+
+- **Puertas:**
+  - **Combate:** rival normal.
+  - **Élite:** rival más duro, mejor premio.
+  - **Tienda:** gastas tus monedas.
+  - **Descanso:** te curas o entrenas.
+- **Salas de combate:** superas la sala al marcar 3 goles (4 en élite). Los jefes tienen 5, 6 o 7 de vida.
+- **Corazones:** cada gol que recibes cuesta 1 corazón. Empiezas con 5. Al llegar a 0 se acaba la run, y no se recuperan solos.
+- **Rivales con rasgos:**
+  - Muralla y Rayo: paleta grande y lenta, o pequeña y rápida.
+  - Ilusionista: lanza bolas fantasma.
+  - Escarcha: congela tu paleta.
+  - Pirómano: la pelota arde casi siempre.
+  - Acorazado: se pone un escudo.
+- **Jefes:** EL MURO, REY DE HIELO y DRAGÓN. Con la mitad de vida se enfurecen.
+- **Mejoras:** tras cada sala eliges 1 de 3 cartas (comunes, raras y legendarias) que se acumulan durante la run. Por ejemplo: Paleta larga, Golpe potente, Efecto, Vampiro, Espectro, Congelador, Segunda vida, Gol de oro, Freno, Titán…
+- **Monedas:** se ganan con goles y salas, y se gastan en la tienda (cartas o curación).
+- **Continuar:** la run se guarda en el dispositivo entre salas. Si sales al menú o cierras la app, CONTINUAR te devuelve al mapa.
+- **Puntos de run:** goles×10 + salas×25 + jefes×100 + monedas. Tabla de récords propia.
+
 ## Versiones
 
 La versión actual está en `version.js`. El menú la muestra y la APK la usa como `versionName`.
