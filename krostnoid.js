@@ -396,7 +396,7 @@ window.PongKrostnoid = (api) => {
       const falling = balls.filter((b) => !b.stuck && b.vy > 0).sort((a, b) => b.y - a.y)[0];
       target = falling ? falling.x + BALL / 2 + Math.sin(time) * paddle.w * 0.3 : size.w / 2;
     } else {
-      const dir = api.axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']);
+      const dir = api.axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']) || api.padX();
       if (dir) paddle.x += dir * PADDLE_SPEED * dt;
       else if (api.touchX() !== null) target = api.touchX();
     }

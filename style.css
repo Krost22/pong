@@ -504,6 +504,22 @@ i.coin {
   #screen #rogue button.door { padding: 6px; gap: 2px; }
 }
 
+/* Botón seleccionado con el mando o las flechas: mismo aspecto que al pasar el ratón, con contorno */
+button.pad-focus,
+#screen.modern .overlay button.pad-focus {
+  background: #fff;
+  color: #000;
+  outline: 3px solid #ffd23f;
+  outline-offset: 3px;
+}
+
+#screen #rogue button.card.pad-focus,
+#screen #rogue button.door.pad-focus {
+  transform: translateY(-3px);
+  outline: 3px solid #ffd23f;
+  outline-offset: 3px;
+}
+
 .hidden {
   display: none !important;
 }

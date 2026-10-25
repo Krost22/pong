@@ -383,11 +383,11 @@
       updateAI(left, dt);
       updateAI(right, dt);
     } else if (vsCom()) {
-      drive(left, axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']), touch.left, dt);
+      drive(left, axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']) || padAxis(0), touch.left, dt);
       updateAI(right, dt);
     } else {
-      drive(left, axis(['KeyW'], ['KeyS']), touch.left, dt);
-      drive(right, axis(['ArrowUp'], ['ArrowDown']), touch.right, dt);
+      drive(left, axis(['KeyW'], ['KeyS']) || padAxis(0), touch.left, dt);
+      drive(right, axis(['ArrowUp'], ['ArrowDown']) || padAxis(1), touch.right, dt);
     }
   }
 
@@ -590,6 +590,7 @@
 
   const knoid = window.PongKrostnoid({
     ctx, screenSize, snap, axis, showMsg,
+    padX: () => pads[0].x, // palanca o cruceta del mando de J1
     sfx: () => sfx(),
     touchX: () => touch.knoid,
     record: () => bestScore(BOARD_KEYS.krostnoid),
@@ -623,6 +624,12 @@
     screenEl.classList.toggle('modern', game !== 'pong' || style === 'modern');
     screenEl.classList.toggle('knoid', isKnoid());
     screenEl.classList.toggle('rogue', isRogue());
+    // Jugando con mando, al abrirse un menú el foco va al primer botón
+    clearPadFocus();
+    if (padInUse && name !== 'game') {
+      const first = overlayButtons()[0];
+      if (first) focusButton(first);
+    }
   }
 
   // Pantalla final: título, puntos y, en los modos con récord, la tabla de mejores puntuaciones
@@ -811,12 +818,18 @@
       window.PongAudio.setMuted(muted);
       return;
     }
+    // Con un menú abierto, las flechas (y la cruceta del mando en Android) recorren los botones
+    if (overlayButtons().length && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+      navMove(e.code === 'ArrowUp' || e.code === 'ArrowLeft' ? -1 : 1);
+      return;
+    }
+    const buttonFocused = document.activeElement && document.activeElement.tagName === 'BUTTON';
     if (demo) {
       if (e.code === 'Digit1' || e.code === 'Numpad1') select('mode', 'com');
       else if (e.code === 'Digit2' || e.code === 'Numpad2') select('mode', '2p');
       else if (e.code === 'KeyC') select('style', 'classic');
       else if (e.code === 'KeyX') select('style', 'modern');
-      else if (e.code === 'Enter') newGame();
+      else if (e.code === 'Enter' && !buttonFocused) newGame(); // con un botón enfocado, Enter lo pulsa
       return;
     }
     if (inRun() && state === 'between') {
@@ -825,7 +838,7 @@
     }
     if (isKnoid() && state === 'play' && ['Space', 'ArrowUp', 'KeyW'].includes(e.code)) knoid.launch();
     else if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Space') togglePause();
-    else if ((e.code === 'KeyN' && !isRogue()) || (state === 'over' && e.code === 'Enter')) newGame();
+    else if ((e.code === 'KeyN' && !isRogue()) || (state === 'over' && e.code === 'Enter' && !buttonFocused)) newGame();
   });
   window.addEventListener('keyup', (e) => {
     keys.delete(e.code);
@@ -836,10 +849,16 @@
   function releaseAll() {
     keys.clear();
     pointers.clear();
+    touchIds.clear();
     touch.left = touch.right = touch.knoid = null;
   }
 
+  // Incrustado (itch.io) cualquier toque en la página de fuera quita el foco al juego: ahí no se pausa
+  // ni se sueltan los dedos; solo se pausa de verdad al ocultar la pestaña
+  const embedded = window.self !== window.top;
   window.addEventListener('blur', () => {
+    keys.clear();
+    if (embedded) return;
     releaseAll();
     pause();
   });
@@ -861,14 +880,26 @@
       : { side: e.clientX < r.left + r.width / 2 ? 'left' : 'right', pos: (e.clientY - r.top) / r.height * H };
   }
 
-  function onPointerDown(e) {
-    if (demo || (state !== 'play' && state !== 'serve')) return;
-    if (e.target.closest && e.target.closest('button')) return;
+  // Empieza a seguir un dedo/puntero; devuelve la mitad que controla (o null si no toca jugar)
+  function grab(e) {
+    if (demo || (state !== 'play' && state !== 'serve')) return null;
+    if (e.target && e.target.closest && e.target.closest('button')) return null;
+    if (embedded) window.focus(); // el teclado y el mando pasan a este marco
+    clearPadFocus();
     const p = readPointer(e);
     const side = p.side === 'knoid' || (!vsCom() && game === 'pong') ? p.side : 'left';
-    pointers.set(e.pointerId, side);
     touch[side] = p.pos;
     if (side === 'knoid') knoid.launch();
+    return side;
+  }
+
+  // Si otro dedo sigue en esa mitad, la paleta lo sigue a él
+  const stillHeld = (side) => [...pointers.values(), ...touchIds.values()].includes(side);
+
+  function onPointerDown(e) {
+    const side = grab(e);
+    if (!side) return;
+    pointers.set(e.pointerId, side);
     e.preventDefault();
   }
 
@@ -881,22 +912,178 @@
     const side = pointers.get(e.pointerId);
     if (!side) return;
     pointers.delete(e.pointerId);
-    // Si otro dedo sigue en esa mitad, la paleta lo sigue a él
-    if (![...pointers.values()].includes(side)) touch[side] = null;
+    if (!stillHeld(side)) touch[side] = null;
+  }
+
+  // Segundo canal con eventos táctiles: algunos navegadores móviles cancelan los eventos de puntero
+  // dentro de páginas incrustadas (como itch.io); así el dedo se sigue igualmente
+  const touchIds = new Map(); // identificador del toque -> mitad
+  function onTouchStart(e) {
+    for (const t of e.changedTouches) {
+      const side = grab(Object.assign({ target: e.target }, { clientX: t.clientX, clientY: t.clientY }));
+      if (side) touchIds.set(t.identifier, side);
+    }
+    if (touchIds.size) e.preventDefault(); // sin scroll ni zoom de la página mientras se juega
+  }
+
+  function onTouchMove(e) {
+    let used = false;
+    for (const t of e.changedTouches) {
+      const side = touchIds.get(t.identifier);
+      if (!side) continue;
+      touch[side] = readPointer(t).pos;
+      used = true;
+    }
+    if (used) e.preventDefault();
+  }
+
+  function onTouchEnd(e) {
+    for (const t of e.changedTouches) {
+      const side = touchIds.get(t.identifier);
+      if (!side) continue;
+      touchIds.delete(t.identifier);
+      if (!stillHeld(side)) touch[side] = null;
+    }
   }
 
   window.addEventListener('pointerdown', onPointerDown, { passive: false });
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerEnd);
   window.addEventListener('pointercancel', onPointerEnd);
+  window.addEventListener('touchstart', onTouchStart, { passive: false });
+  window.addEventListener('touchmove', onTouchMove, { passive: false });
+  window.addEventListener('touchend', onTouchEnd);
+  window.addEventListener('touchcancel', onTouchEnd);
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', layout);
+
+  // --- Entrada: mando ---
+  // Gamepad API (navegador y APK) para palanca, cruceta y botones. La APK además reenvía el mando
+  // nativo de Android (onNativePad / onNativeButton) por si su WebView no expone el Gamepad API.
+  const PAD_DEADZONE = 0.3, NAV_REPEAT = 0.28, NAV_DEBOUNCE = 60;
+  const pads = [{ x: 0, y: 0 }, { x: 0, y: 0 }]; // J1 y J2: -1..1 (palanca o cruceta)
+  const nativePad = { x: 0, y: 0 };
+  const padPrev = [{}, {}];
+  let navHeld = 0, navTimer = 0, lastNav = -Infinity, padInUse = false;
+  let clock = 0; // tiempo de juego en ms (avanza con cada fotograma)
+
+  const dead = (v) => (Math.abs(v) < PAD_DEADZONE ? 0 : v);
+  const connectedPads = () => (navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : []);
+
+  window.onNativePad = (x, y) => {
+    nativePad.x = dead(x);
+    nativePad.y = dead(y);
+  };
+  window.onNativeButton = (name) => {
+    if (connectedPads().length) return; // el Gamepad API ya lo está leyendo
+    padInUse = true;
+    padPress(name);
+  };
+
+  // Botones del menú abierto (menú, pausa, resultados o pantallas del RogueLike)
+  function overlayButtons() {
+    const open = ['menu', 'pause', 'over', 'rogue'].map($).find((el) => !el.classList.contains('hidden'));
+    return open ? [...open.querySelectorAll('button')].filter((b) => !b.disabled && b.offsetParent !== null) : [];
+  }
+
+  function clearPadFocus() {
+    document.querySelectorAll('.pad-focus').forEach((b) => b.classList.remove('pad-focus'));
+  }
+
+  function focusButton(b) {
+    clearPadFocus();
+    b.classList.add('pad-focus');
+    b.focus({ preventScroll: true });
+  }
+
+  function navMove(delta) {
+    const list = overlayButtons();
+    if (!list.length) return;
+    if (clock - lastNav < NAV_DEBOUNCE) return; // cruceta = flecha + botón del mando: un solo paso
+    lastNav = clock;
+    padInUse = true;
+    const i = list.indexOf(document.activeElement);
+    focusButton(list[i < 0 ? 0 : (i + delta + list.length) % list.length]);
+  }
+
+  // A: pulsar / lanzar · B: atrás · Start: pausa (o pulsar en un menú)
+  function padPress(name) {
+    const list = overlayButtons();
+    if (list.length && (name === 'a' || name === 'start')) {
+      const target = list.includes(document.activeElement) ? document.activeElement : list[0];
+      if (!list.includes(document.activeElement)) focusButton(target);
+      target.click();
+    } else if (name === 'a' && isKnoid() && state === 'play') {
+      knoid.launch();
+    } else if (name === 'start' && (state === 'play' || state === 'serve')) {
+      pause();
+    } else if (name === 'b') {
+      window.onAndroidBack();
+    }
+  }
+
+  function pollPads(dt) {
+    const list = connectedPads();
+    for (let i = 0; i < 2; i++) {
+      const g = list[i];
+      let x = 0, y = 0;
+      if (g) {
+        const pressed = (n) => !!(g.buttons[n] && g.buttons[n].pressed);
+        x = dead(g.axes[0] || 0) || dead(g.axes[2] || 0); // palanca izquierda (o la derecha)
+        y = dead(g.axes[1] || 0) || dead(g.axes[3] || 0);
+        if (pressed(12)) y = -1;
+        if (pressed(13)) y = 1;
+        if (pressed(14)) x = -1;
+        if (pressed(15)) x = 1;
+        for (const [n, name] of [[0, 'a'], [1, 'b'], [9, 'start']]) {
+          if (pressed(n) && !padPrev[i][n]) {
+            padInUse = true;
+            padPress(name);
+          }
+          padPrev[i][n] = pressed(n);
+        }
+      } else if (i === 0) {
+        x = nativePad.x;
+        y = nativePad.y;
+      }
+      pads[i].x = x;
+      pads[i].y = y;
+      if (x || y) padInUse = true;
+    }
+    // En los menús, la palanca de J1 mueve el foco (con repetición si se mantiene)
+    const dir = Math.abs(pads[0].y) > 0.5 ? Math.sign(pads[0].y) : (Math.abs(pads[0].x) > 0.5 ? Math.sign(pads[0].x) : 0);
+    if (!dir || !overlayButtons().length) {
+      navHeld = 0;
+    } else if (dir !== navHeld || (navTimer -= dt) <= 0) {
+      navMove(dir);
+      navTimer = dir !== navHeld ? NAV_REPEAT * 1.6 : NAV_REPEAT;
+      navHeld = dir;
+    }
+  }
+
+  // Dirección de la paleta de un jugador con el mando: en horizontal la palanca va arriba/abajo;
+  // en vertical la cancha está girada y la paleta se mueve con izquierda/derecha
+  const padAxis = (i) => (portrait ? pads[i].x : pads[i].y);
+
+  // Un mismo botón no se pulsa dos veces seguidas (p. ej. Enter + botón A del mando a la vez)
+  let lastClick = { el: null, t: -Infinity };
+  document.addEventListener('click', (e) => {
+    const now = clock;
+    if (e.target === lastClick.el && now - lastClick.t < 200) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      return;
+    }
+    lastClick = { el: e.target, t: now };
+  }, true);
 
   // --- Bucle principal ---
   let last = performance.now();
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
+    clock += dt * 1000;
+    pollPads(dt);
     update(dt);
     draw();
     requestAnimationFrame(frame);
@@ -904,7 +1091,7 @@
 
   // Solo para pruebas automáticas: index.html?debug expone el estado interno
   if (/[?&]debug\b/.test(location.search)) {
-    window.__pong = { ball, left, right, powerups, knoid, rogue, modern, touch, get state() { return state; } };
+    window.__pong = { ball, left, right, powerups, knoid, rogue, modern, touch, pads, overlayButtons, padPress, get state() { return state; } };
   }
 
   layout();

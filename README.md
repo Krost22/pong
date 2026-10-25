@@ -81,6 +81,17 @@ Una *run* de Pong moderno contra la COM, en 3 pisos de 4 salas: **Césped**, **H
 - **Continuar:** la run se guarda en el dispositivo entre salas. Si sales al menú o cierras la app, CONTINUAR te devuelve al mapa.
 - **Puntos de run:** goles×10 + salas×25 + jefes×100 + monedas. Tabla de récords propia.
 
+## Mando
+
+Se puede jugar con mando en el navegador y en la APK de Android (palanca analógica y cruceta).
+
+- **Palanca o cruceta:** mueve la paleta. En vertical, la paleta se mueve con izquierda/derecha.
+- **En los menús:** la palanca o la cruceta recorren los botones.
+- **A:** pulsar el botón elegido; en KrostNoid, lanzar la bola.
+- **B:** atrás o pausa.
+- **Start:** pausa.
+- **Dos jugadores:** el segundo mando controla al jugador 2.
+
 ## Versiones
 
 La versión actual está en `version.js`. El menú la muestra y la APK la usa como `versionName`.

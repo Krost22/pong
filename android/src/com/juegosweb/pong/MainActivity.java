@@ -5,6 +5,9 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.DisplayCutout;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -73,6 +76,37 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    // Mando: algunos WebView no exponen el Gamepad API (sobre todo la palanca analógica),
+    // así que se reenvía al juego. Los eventos siguen llegando al WebView igualmente.
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent e) {
+        int source = e.getSource();
+        boolean pad = (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                || (source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD;
+        if (pad && e.getAction() == MotionEvent.ACTION_MOVE) {
+            float x = e.getAxisValue(MotionEvent.AXIS_X), y = e.getAxisValue(MotionEvent.AXIS_Y);
+            float hatX = e.getAxisValue(MotionEvent.AXIS_HAT_X), hatY = e.getAxisValue(MotionEvent.AXIS_HAT_Y);
+            if (hatX != 0) x = hatX; // la cruceta de algunos mandos llega como eje "hat"
+            if (hatY != 0) y = hatY;
+            web.evaluateJavascript("window.onNativePad && window.onNativePad(" + x + "," + y + ")", null);
+        }
+        return super.dispatchGenericMotionEvent(e);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        String name = null;
+        switch (e.getKeyCode()) {
+            case KeyEvent.KEYCODE_BUTTON_A: name = "a"; break;
+            case KeyEvent.KEYCODE_BUTTON_B: name = "b"; break;
+            case KeyEvent.KEYCODE_BUTTON_START: name = "start"; break;
+        }
+        if (name != null && e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+            web.evaluateJavascript("window.onNativeButton && window.onNativeButton('" + name + "')", null);
+        }
+        return super.dispatchKeyEvent(e);
     }
 
     @Override
