@@ -1,12 +1,13 @@
 // Graba el tráiler: sirve el juego, controla Chrome por CDP, guarda cada fotograma,
 // sintetiza la música chiptune y monta el MP4 con ffmpeg.
-// Uso: node record.mjs <carpeta del juego> <carpeta de trabajo> <mp4 de salida>
+// Uso: node record.mjs <carpeta del juego> <carpeta de trabajo> <mp4 de salida> [página] [ancho] [alto]
+// (por defecto trailer.html a 1280x720; para TikTok: tiktok.html 1080 1920)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
-const [GAME, DIR, OUTPUT] = process.argv.slice(2);
+const [GAME, DIR, OUTPUT, PAGE = 'trailer.html', VW = '1280', VH = '720'] = process.argv.slice(2);
 const FRAMES = path.join(DIR, 'frames');
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const FPS = 30;
@@ -30,7 +31,7 @@ const server = http.createServer((req, res) => {
 }).listen(8765);
 
 const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--remote-debugging-port=9333',
-  `--user-data-dir=${path.join(DIR, 'profile')}`, '--window-size=1280,720', 'http://127.0.0.1:8765/trailer.html']);
+  `--user-data-dir=${path.join(DIR, 'profile')}`, `--window-size=${VW},${VH}`, `http://127.0.0.1:8765/${PAGE}`]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws, msgId = 0;
@@ -90,7 +91,7 @@ try {
     await sleep(250);
     try {
       const list = await (await fetch('http://127.0.0.1:9333/json/list')).json();
-      target = list.find((t) => t.type === 'page' && t.url.includes('trailer.html'));
+      target = list.find((t) => t.type === 'page' && t.url.includes(PAGE));
     } catch (_) { /* Chrome aún arrancando */ }
   }
   if (!target) throw new Error('Chrome no respondió');
