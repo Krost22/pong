@@ -10,11 +10,12 @@
 </style>
 </head>
 <body>
-<canvas id="out" width="1280" height="720"></canvas>
+<canvas id="out" width="1920" height="1080"></canvas>
 <iframe id="g" src="/game/index.html?debug"></iframe>
 <script>
 // Tráiler: se graba fotograma a fotograma desde el juego real (iframe con requestAnimationFrame controlado)
-const OUT_W = 1280, OUT_H = 720, FONT = '"Press Start 2P", "Courier New", monospace';
+// Se compone en coordenadas de 1280x720 y se dibuja a 1920x1080 (1080p, lo recomendado por Steam y YouTube)
+const OUT_W = 1280, OUT_H = 720, OUT_SCALE = 1.5, FONT = '"Press Start 2P", "Courier New", monospace';
 const out = document.getElementById('out');
 const o = out.getContext('2d');
 let W, D, P, gt = 0, cheat = null, forceGoal = 0;
@@ -171,8 +172,9 @@ window.renderFrame = (i) => {
     if (sc.setup) sc.setup();
   }
   if (sc.events && sc.events[f]) sc.events[f]();
-  if (sc.kind !== 'intro') step(2);
+  step(2);
 
+  o.setTransform(OUT_SCALE, 0, 0, OUT_SCALE, 0, 0);
   o.fillStyle = '#000';
   o.fillRect(0, 0, OUT_W, OUT_H);
 

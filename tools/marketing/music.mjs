@@ -150,20 +150,18 @@ export function writeMusic(seconds, file) {
     }
   };
 
-  // Estructura: 1 compás de intro (pad + arpegio), cuerpo con frases A/B y cadencia final IV–V–I
-  const totalBars = Math.max(4, Math.floor(seconds / BAR));
-  const endChord = seconds - Math.max(BAR * 0.75, 1.6); // el Do final suena hasta el final del vídeo
-  const cadenceStart = endChord - 2 * BAR;
+  // Estructura, toda sobre la rejilla de compases: 1 compás de intro (pad + arpegio), cuerpo con frases A/B
+  // sin huecos, cadencia IV–V y el Do final al empezar un compás (fuera de la rejilla se oye un tropiezo).
+  // Lo que sobra tras el último compás es la cola del acorde final, que suena hasta el final del vídeo.
+  const endBar = Math.max(4, Math.floor((seconds - 1.6) / BAR));
+  const endChord = endBar * BAR, cadenceStart = endChord - 2 * BAR;
   playBar(0, 'Am', null, { intro: true });
-  let bar = 1;
-  for (; (bar + 1) * BAR <= cadenceStart; bar++) {
+  for (let bar = 1; bar < endBar - 2; bar++) {
     const chordName = PROGRESSION[(bar - 1) % 4];
     const phrase = Math.floor((bar - 1) / 4) % 2 === 0 ? PHRASE_A : PHRASE_B;
     playBar(bar * BAR, chordName, phrase[chordName]);
     if ((bar - 1) % 8 === 0) drum(bar * BAR, 'crash', 0.9);
   }
-  // Relleno hasta la cadencia con el acorde que toque, sin melodía
-  for (let t = bar * BAR; t < cadenceStart - 0.01; t += BAR) playBar(t, PROGRESSION[(bar++ - 1) % 4], []);
   CADENCE.forEach((c, i) => playBar(cadenceStart + i * BAR, c.chord, c.melody));
   // Acorde final de Do: pad, arpegio lento, bajo y melodía en la tónica, con platillo
   const fin = CHORDS.C, rest = seconds - endChord;

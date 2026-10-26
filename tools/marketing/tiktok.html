@@ -62,7 +62,7 @@ const fast = (v) => { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx
 // Textos: gancho con pregunta en el primer segundo (sin decir aún el nombre), 2-3 palabras por corte,
 // verbos en segunda persona y la llamada a la acción grande y en pantalla más de 3 s.
 const scenes = [
-  { n: 54, lines: ['¿ESTO', 'ES PONG?'], color: '#ffd23f',
+  { n: 54, lines: ['¿ESTO', 'ES PONG?'], color: '#ffd23f', instant: true, // visible desde el 1er fotograma (miniatura)
     setup: () => { startPong('modern'); cheat = follow; step(90); fast(320); }, events: { 16: fireGoal } },
   { n: 48, lines: ['ASÍ ERA', 'EN 1972...'], color: '#ffffff',
     setup: () => { startPong('classic'); cheat = follow; step(70); } },
@@ -166,8 +166,8 @@ window.renderFrame = (i) => {
     if (f > 20) { o.globalAlpha = ease((f - 20) / 8); text('LINK EN MI PERFIL', OUT_W / 2, 1330, 40, '#ffd23f'); o.globalAlpha = 1; }
   } else {
     drawGame(1, 1 + 0.05 * (1 - ease(f / 8)));
-    caption(sc.lines, sc.color, f, sc.captionY);
-    if (f < 4) { o.fillStyle = `rgba(255,255,255,${0.7 * (1 - f / 4)})`; o.fillRect(0, 0, OUT_W, OUT_H); }
+    caption(sc.lines, sc.color, sc.instant ? 6 + f : f, sc.captionY);
+    if (f < 4 && !sc.instant) { o.fillStyle = `rgba(255,255,255,${0.7 * (1 - f / 4)})`; o.fillRect(0, 0, OUT_W, OUT_H); }
   }
   return out.toDataURL('image/jpeg', 0.92);
 };

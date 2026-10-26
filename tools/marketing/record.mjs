@@ -1,7 +1,7 @@
 // Graba el tráiler: sirve el juego, controla Chrome por CDP, guarda cada fotograma,
 // sintetiza la música chiptune y monta el MP4 con ffmpeg.
 // Uso: node record.mjs <carpeta del juego> <carpeta de trabajo> <mp4 de salida> [página] [ancho] [alto]
-// (por defecto trailer.html a 1280x720; para TikTok: tiktok.html 1080 1920)
+// (por defecto trailer.html, que sale a 1920x1080; para TikTok: tiktok.html 1080 1920)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -83,8 +83,18 @@ try {
   const wav = path.join(DIR, 'music.wav');
   writeMusic(total / FPS, wav);
   fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
+  // Sonoridad estándar de plataformas (YouTube/TikTok normalizan a unos -14 LUFS) con pico real de -1 dBTP para que
+  // el AAC no sature: primera pasada para medir, segunda lineal con esas medidas
+  const LOUD = 'I=-14:TP=-1:LRA=11';
+  const probe = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', wav, '-af', `loudnorm=${LOUD}:print_format=json`, '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = JSON.parse(probe.stderr.match(/\{[^{}]*\}/g).pop());
+  const loudnorm = `loudnorm=${LOUD}:linear=true:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}`;
+  // Vídeo en rango limitado BT.709 (los JPEG son de rango completo y algunos reproductores los verían lavados)
   const r = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(FRAMES, 'f%04d.jpg'), '-i', wav,
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest',
+    '-vf', 'scale=in_range=pc:out_range=tv:out_color_matrix=bt709,format=yuv420p', '-color_range', 'tv',
+    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-profile:v', 'high', '-r', String(FPS),
+    '-af', `${loudnorm},aresample=48000`, '-c:a', 'aac', '-b:a', '192k', '-shortest',
     '-movflags', '+faststart', OUTPUT], { stdio: 'inherit' });
   console.log(r.status === 0 ? `video listo: ${OUTPUT}` : `ffmpeg falló (${r.status})`);
 } catch (e) {
