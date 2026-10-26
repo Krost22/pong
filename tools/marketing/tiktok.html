@@ -59,25 +59,27 @@ const fireGoal = () => { P.ball.vx = 330; P.ball.vy = 40; P.ball.x = 200; forceG
 const fast = (v) => { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx *= v / s; P.ball.vy *= v / s; };
 
 // [fotogramas, texto grande (líneas), color, preparación, eventos por fotograma]
+// Textos: gancho con pregunta en el primer segundo (sin decir aún el nombre), 2-3 palabras por corte,
+// verbos en segunda persona y la llamada a la acción grande y en pantalla más de 3 s.
 const scenes = [
-  { n: 54, lines: ['ESTE NO ES', 'EL PONG', 'DE SIEMPRE'], color: '#ffd23f',
+  { n: 54, lines: ['¿ESTO', 'ES PONG?'], color: '#ffd23f',
     setup: () => { startPong('modern'); cheat = follow; step(90); fast(320); }, events: { 16: fireGoal } },
-  { n: 48, lines: ['EMPIEZA', 'CLÁSICO...'], color: '#ffffff',
+  { n: 48, lines: ['ASÍ ERA', 'EN 1972...'], color: '#ffffff',
     setup: () => { startPong('classic'); cheat = follow; step(70); } },
-  { n: 96, lines: ['...Y SE VUELVE', 'MODERNO'], color: '#7ee05a',
+  { n: 96, lines: ['...Y ASÍ', 'ARDE HOY'], color: '#7ee05a',
     setup: () => { startPong('modern'); cheat = follow; step(80); },
     events: {
       6: () => P.powerups.gifts.push({ x: 152, y: Math.max(6, Math.min(P.ball.y - 6, 150)), life: 12, t: 0, colors: ['#ff5a4f', '#b8322a', '#ffd23f'] }),
       40: () => fast(320), 70: fireGoal,
     } },
-  { n: 52, lines: ['ROGUELIKE', 'CON JEFES'], color: '#ffd23f',
+  { n: 52, lines: ['VENCE', 'A LOS JEFES'], color: '#ffd23f',
     setup: () => { rogueRoom({ room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 2; } },
-  { n: 46, lines: ['PISTA DE', 'HIELO'], color: '#9fe6ff',
+  { n: 46, lines: ['NO TE', 'CONGELES'], color: '#9fe6ff',
     setup: () => { rogueRoom({ floor: 2, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 3; P.powerups.spawnGhosts(2); } },
-  { n: 60, lines: ['EL DRAGÓN', 'TE QUEMA'], color: '#ff7a1f',
+  { n: 60, lines: ['SUS GOLES', 'QUEMAN'], color: '#ff7a1f',
     setup: () => { rogueRoom({ floor: 3, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(90); P.left.score = 4; P.rogue.onGoal('left', false); },
     events: { 24: () => P.rogue.onGoal('right', true) } },
-  { n: 100, lines: ['Y UN', 'ROMPELADRILLOS'], color: '#3fa7ff', captionY: 1000, // los ladrillos están arriba
+  { n: 100, lines: ['Y ENCIMA', 'ROMPE TODO'], color: '#3fa7ff', captionY: 1000, // los ladrillos están arriba
     setup: () => { toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(150); },
     events: { 2: () => { P.knoid.spawnShip(); P.knoid.spawnShip(); }, 20: () => P.knoid.applyCapsule('F'), 62: () => P.knoid.applyCapsule('X') } },
   { n: 105, kind: 'outro', setup: () => { cheat = null; toMenu(); pick("[data-game='roguelike']"); step(90); } },
@@ -153,15 +155,15 @@ window.renderFrame = (i) => {
   if (sc.kind === 'outro') {
     drawGame(0.3);
     logo(OUT_W / 2, 760, 190);
-    if (f > 12) { o.globalAlpha = ease((f - 12) / 10); text('JUEGA GRATIS', OUT_W / 2, 900, 56, '#7ee05a'); o.globalAlpha = 1; }
-    if (f > 24) {
-      o.globalAlpha = ease((f - 24) / 10);
+    if (f > 6) { o.globalAlpha = ease((f - 6) / 8); text('JUÉGALO GRATIS', OUT_W / 2, 900, 56, '#7ee05a'); o.globalAlpha = 1; }
+    if (f > 14) {
+      o.globalAlpha = ease((f - 14) / 8);
       itchLogo(OUT_W / 2 - 48, 960, 96);
       text('krostgames.itch.io', OUT_W / 2, 1150, 40, '#ffffff');
       text('/pong', OUT_W / 2, 1210, 40, '#ffffff');
       o.globalAlpha = 1;
     }
-    if (f > 40) { o.globalAlpha = ease((f - 40) / 10); text('LINK EN MI PERFIL', OUT_W / 2, 1320, 30, '#ffd23f'); o.globalAlpha = 1; }
+    if (f > 20) { o.globalAlpha = ease((f - 20) / 8); text('LINK EN MI PERFIL', OUT_W / 2, 1330, 40, '#ffd23f'); o.globalAlpha = 1; }
   } else {
     drawGame(1, 1 + 0.05 * (1 - ease(f / 8)));
     caption(sc.lines, sc.color, f, sc.captionY);
