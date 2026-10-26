@@ -16,3 +16,4 @@ node tools/marketing/record.mjs . tools/marketing marketing/tiktok.mp4 tiktok.ht
 - **Resultados:** se guardan en `marketing/`, que no se sube al repositorio.
 
 - `tiktok.html`: vídeo vertical para TikTok/Reels/Shorts (1080x1920, ~19 s)
+- `music.mjs`: música chiptune en Do mayor (Lam–Fa–Do–Sol, melodía pregunta/respuesta, cadencia IV–V–I), osciladores PolyBLEP, estéreo con eco. Uso suelto: `node tools/marketing/music.mjs <segundos> salida.wav`
