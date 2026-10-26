@@ -24,6 +24,22 @@ body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none; /* iOS: sin menú de "mantener pulsado" */
+}
+
+/* iOS Safari: el documento entero queda fijo y sin gestos del navegador (scroll encadenado a la
+   página de itch.io, rebote, zoom), así cualquier dedo dentro del juego llega al juego */
+html {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+#screen,
+#screen canvas {
+  touch-action: none;
 }
 
 /* game.js fija el tamaño exacto según la pantalla y la orientación */

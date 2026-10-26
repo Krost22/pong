@@ -950,6 +950,44 @@
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerEnd);
   window.addEventListener('pointercancel', onPointerEnd);
+  // Diagnóstico táctil: 5 toques sobre la versión en el menú muestran dónde cae cada dedo
+  let versionTaps = 0, touchDebug = null;
+  $('version').addEventListener('click', () => {
+    if (++versionTaps < 5) return;
+    versionTaps = 0;
+    if (touchDebug) {
+      touchDebug.remove();
+      touchDebug = null;
+      return;
+    }
+    touchDebug = document.createElement('div');
+    touchDebug.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:99;font:11px monospace;color:#0f0;background:rgba(0,0,0,.7);padding:4px;pointer-events:none;white-space:pre';
+    document.body.appendChild(touchDebug);
+    touchDebug.textContent = `DIAGNÓSTICO TÁCTIL\nventana ${innerWidth}x${innerHeight} · ${embedded ? 'incrustado' : 'directo'}`;
+  });
+  const markTouch = (kind, x, y, extra = '') => {
+    if (!touchDebug) return;
+    const dot = document.createElement('div');
+    dot.style.cssText = `position:fixed;left:${x - 6}px;top:${y - 6}px;width:12px;height:12px;border-radius:50%;background:${kind === 'touch' ? '#0f0' : '#f0f'};z-index:98;pointer-events:none`;
+    document.body.appendChild(dot);
+    setTimeout(() => dot.remove(), 1200);
+    const lines = touchDebug.textContent.split('\n').slice(0, 2);
+    touchDebug.textContent = `${lines.join('\n')}\n${kind} ${Math.round(x)},${Math.round(y)} ${extra} · estado ${state}`;
+  };
+  window.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) markTouch('touch', t.clientX, t.clientY, e.target.id || e.target.tagName); }, true);
+  window.addEventListener('pointerdown', (e) => markTouch('pointer', e.clientX, e.clientY, e.pointerType), true);
+  window.addEventListener('touchcancel', () => markTouch('touch', 0, 0, 'CANCELADO'), true);
+  window.addEventListener('pointercancel', () => markTouch('pointer', 0, 0, 'CANCELADO'), true);
+
+  // iOS Safari: bloquear el zoom con dos dedos y el doble toque, que roban el gesto al juego
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+  }
+  // Durante la partida, cualquier dedo que se mueva fuera de un botón es del juego, aunque haya
+  // empezado fuera del área que sigue: así iOS no lo convierte en scroll de la página de fuera
+  document.addEventListener('touchmove', (e) => {
+    if ((state === 'play' || state === 'serve') && !(e.target.closest && e.target.closest('button, .overlay'))) e.preventDefault();
+  }, { passive: false });
   window.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
   window.addEventListener('touchend', onTouchEnd);
