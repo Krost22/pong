@@ -15,8 +15,11 @@ const FPS = 30;
 fs.rmSync(FRAMES, { recursive: true, force: true });
 fs.mkdirSync(FRAMES, { recursive: true });
 
-// En el juego servido: requestAnimationFrame manual y sin pausas por perder el foco
+// En el juego servido: requestAnimationFrame manual, sin pausas por perder el foco y azar con semilla fija
+// (mismos power-ups en cada grabación: si una toma sale bien, sale igual siempre)
 const STUB = '<head><script>window.__raf=null;window.requestAnimationFrame=(cb)=>{window.__raf=cb};' +
+  '(()=>{let s=20261025;Math.random=()=>{s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);' +
+  't=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};})();' +
   'try{localStorage.clear()}catch(e){};' +
   'window.addEventListener("blur",(e)=>e.stopImmediatePropagation(),true);' +
   'document.addEventListener("visibilitychange",(e)=>e.stopImmediatePropagation(),true);</script>';
@@ -75,11 +78,21 @@ try {
   }
   if (!total) throw new Error('el juego no arrancó en el iframe: ' + await evaluate('(() => { const w = document.getElementById("g").contentWindow; return JSON.stringify({ url: w && w.location.href, pong: !!(w && w.__pong), raf: !!(w && w.__raf) }); })()'));
   console.log(`fotogramas: ${total} (${(total / FPS).toFixed(1)} s)`);
-  for (let i = 0; i < total; i++) {
-    const data = await evaluate(`renderFrame(${i})`);
+  // Avisa si la imagen se queda congelada (fotogramas idénticos seguidos): en un vídeo se ve como un tirón
+  let prev = null, runStart = 0;
+  const frozen = [];
+  for (let i = 0; i <= total; i++) {
+    const data = i < total ? await evaluate(`renderFrame(${i})`) : null;
+    if (data !== prev) {
+      if (i - runStart >= 8) frozen.push(`${(runStart / FPS).toFixed(2)}-${(i / FPS).toFixed(2)} s`);
+      runStart = i;
+      prev = data;
+    }
+    if (i === total) break;
     fs.writeFileSync(path.join(FRAMES, `f${String(i).padStart(4, '0')}.jpg`), Buffer.from(data.split(',')[1], 'base64'));
     if (i % 100 === 0) console.log(`  ${i}/${total}`);
   }
+  if (frozen.length) console.warn(`AVISO: imagen congelada en ${frozen.join(', ')}`);
   const wav = path.join(DIR, 'music.wav');
   writeMusic(total / FPS, wav);
   fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
