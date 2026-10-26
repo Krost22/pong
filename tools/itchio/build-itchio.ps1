@@ -25,7 +25,7 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 Remove-Item $stage -Recurse -Force
 
 Copy-Item (Join-Path $here 'descripcion.html'), (Join-Path $here 'descripcion.txt') $out
-foreach ($img in 'itchio-cover.png', 'itchio-cover-630x500.png', 'itchio-descripcion.png') {
+foreach ($img in 'itchio-cover.png', 'itchio-cover-630x500.png', 'itchio-descripcion.png', 'itchio-banner.png', 'itchio-background.png', 'itchio-embed-bg.png') {
     $src = Join-Path $game "marketing\$img"
     if (Test-Path $src) { Copy-Item $src $out } else { Write-Host "Aviso: falta marketing\$img (genéralo con tools\marketing\stills.mjs)" }
 }

@@ -22,6 +22,9 @@ const IMAGES = [
   ['05-pista-de-hielo-vertical', 'ice', 1080, 1920, 540, 960],
   ['itchio-cover', 'cover', 1260, 1000, 960, 540], // 630x500 recomendado por itch.io, a doble resolución
   ['itchio-descripcion', 'desc', 1260, 1900, 960, 540], // imagen para el texto de la página de itch.io
+  ['itchio-banner', 'banner', 1920, 480, 960, 540],        // banner (itch.io lo muestra hasta 960 px)
+  ['itchio-background', 'bg', 1920, 1080, 960, 540],       // fondo de la página
+  ['itchio-embed-bg', 'embed', 1080, 720, 1080, 720],      // fondo del recuadro del juego (mismo tamaño que el embed)
 ].filter(([, img]) => !ONLY || img === ONLY);
 
 const server = http.createServer((req, res) => {

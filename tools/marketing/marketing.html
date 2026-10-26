@@ -232,6 +232,60 @@ const IMAGES = {
     o.fillStyle = 'rgba(0,0,0,0.5)'; o.fillRect(0, OUT_H - 100, OUT_W, 100);
     text('VERTICAL U HORIZONTAL · NAVEGADOR Y ANDROID · KROSTGAMES 2026', OUT_W / 2, OUT_H - 42, 18, '#9fd4ff', 'center', null);
   },
+  // 8. Banner de la página de itch.io (se muestra arriba, hasta 960 px de ancho)
+  banner() {
+    startPong('modern'); cheat = follow; step(200); { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx *= 320 / s; P.ball.vy *= 320 / s; } step(16); const modern = snap();
+    rogueRoom({ floor: 3, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(120); P.left.score = 4; P.rogue.onGoal('left', false); step(120); const lava = snap();
+    rogueRoom({ floor: 2, room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); const ice = snap();
+    toMenu(); pick("[data-game='krostnoid']"); $('btn-start').click(); cheat = knoidFollow; step(220); P.knoid.spawnShip(); P.knoid.applyCapsule('F'); step(70); const knoid = snap();
+    const tiles = [modern, ice, lava, knoid], tw = OUT_W / tiles.length;
+    tiles.forEach((img, i) => cover(img, i * tw, 0, tw, OUT_H));
+    const g = o.createLinearGradient(0, 0, OUT_W, 0);
+    g.addColorStop(0, 'rgba(11,16,38,0.55)'); g.addColorStop(0.5, 'rgba(11,16,38,0.92)'); g.addColorStop(1, 'rgba(11,16,38,0.55)');
+    o.fillStyle = g; o.fillRect(0, 0, OUT_W, OUT_H);
+    o.fillStyle = '#ffd23f'; o.fillRect(0, OUT_H - 10, OUT_W, 10);
+    for (let i = 1; i < tiles.length; i++) { o.fillStyle = 'rgba(255,255,255,0.25)'; o.fillRect(i * tw - 2, 0, 4, OUT_H); }
+    logo(OUT_W / 2, OUT_H / 2 + 60, 170);
+    text('4 JUEGOS EN 1 · KROSTGAMES', OUT_W / 2, OUT_H / 2 + 140, 28, '#ffffff');
+  },
+  // 9. Fondo de la página: espacio oscuro con estrellas y elementos del juego muy tenues
+  bg() {
+    o.fillStyle = '#0b1026'; o.fillRect(0, 0, OUT_W, OUT_H);
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 420; i++) {
+      const s = rnd() < 0.12 ? 6 : 3;
+      o.fillStyle = rnd() < 0.15 ? 'rgba(255,255,255,0.55)' : 'rgba(90,110,180,0.45)';
+      o.fillRect(Math.round(rnd() * OUT_W / 3) * 3, Math.round(rnd() * OUT_H / 3) * 3, s, s);
+    }
+    // Paletas, pelotas y ladrillos dispersos, casi transparentes
+    const colors = ['#3fa7ff', '#ff5a4f', '#7ee05a', '#ffd23f', '#b07cff'];
+    o.globalAlpha = 0.13;
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * OUT_W, y = rnd() * OUT_H, c = colors[i % colors.length], k = rnd();
+      o.fillStyle = c;
+      if (k < 0.35) o.fillRect(x, y, 12, 72);           // paleta
+      else if (k < 0.7) o.fillRect(x, y, 56, 22);       // ladrillo
+      else { o.fillRect(x + 6, y, 12, 24); o.fillRect(x, y + 6, 24, 12); } // pelota en cruz
+    }
+    o.globalAlpha = 1;
+    // Línea central punteada de Pong, muy tenue
+    o.fillStyle = 'rgba(255,255,255,0.05)';
+    for (let y = 0; y < OUT_H; y += 48) o.fillRect(OUT_W / 2 - 6, y, 12, 24);
+  },
+  // 10. Fondo del recuadro del juego antes de pulsar "Run game" (centro libre para el botón)
+  embed() {
+    startPong('modern'); cheat = follow; step(160);
+    P.powerups.gifts.push({ x: 152, y: 40, life: 12, t: 0, colors: ['#ff5a4f', '#b8322a', '#ffd23f'] });
+    { const s = Math.hypot(P.ball.vx, P.ball.vy) || 1; P.ball.vx *= 320 / s; P.ball.vy *= 320 / s; } step(18);
+    cover(snap(), 0, 0, OUT_W, OUT_H);
+    const v = o.createRadialGradient(OUT_W / 2, OUT_H / 2, 60, OUT_W / 2, OUT_H / 2, OUT_W * 0.7);
+    v.addColorStop(0, 'rgba(0,0,0,0.65)'); v.addColorStop(1, 'rgba(0,0,0,0.35)');
+    o.fillStyle = v; o.fillRect(0, 0, OUT_W, OUT_H);
+    logo(OUT_W / 2, 170, 110);
+    text('CLÁSICO · MODERNO · ROGUELIKE · KROSTNOID', OUT_W / 2, 225, 16, '#ffffff');
+    text('TÁCTIL · TECLADO · MANDO', OUT_W / 2, OUT_H - 60, 18, '#7ee05a');
+  },
   // 6. Portada para itch.io (630x500 x2): los tres mundos en franjas diagonales y una bola de fuego gigante
   cover() {
     rogueRoom({ room: 3, doors: ['boss'] }, 'boss'); cheat = follow; step(150); P.left.score = 2; step(10); const grass = snap();
